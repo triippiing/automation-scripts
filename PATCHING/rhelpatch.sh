@@ -72,9 +72,14 @@ check_dnf_not_running() {
 
 ensure_dnf_utils() {
     if ! command -v needs-restarting &>/dev/null; then
-        log "INFO" "needs-restarting not found; installing dnf-utils..."
-        dnf -y install dnf-utils -q >> "$LOG_FILE" 2>&1 \
-            || log "WARNING" "Could not install dnf-utils; reboot detection will use fallback."
+        if [[ "$RHEL_MAJOR" == "8" ]]; then
+            local pkg="yum-utils"
+        else
+            local pkg="dnf-utils"
+        fi
+        log "INFO" "needs-restarting not found; installing ${pkg}..."
+        dnf -y install "$pkg" -q >> "$LOG_FILE" 2>&1 \
+            || log "WARNING" "Could not install ${pkg}; reboot detection will use fallback."
     fi
 }
 
