@@ -83,6 +83,21 @@ ensure_dnf_utils() {
     fi
 }
 
+prompt_subscription_refresh() {
+    if [[ -t 0 ]]; then
+        read -r -p "Run subscription-manager refresh before patching? [y/N]: " yn
+        if [[ "${yn,,}" == "y" ]]; then
+            log "INFO" "Running subscription-manager refresh..."
+            subscription-manager refresh >> "$LOG_FILE" 2>&1 \
+                || log "WARNING" "subscription-manager refresh failed; continuing."
+        else
+            log "INFO" "Skipping subscription-manager refresh."
+        fi
+    else
+        log "INFO" "Non-interactive session; skipping subscription-manager refresh prompt."
+    fi
+}
+
 # --- Start ---
 
 mkdir -p "$LOG_DIR"
@@ -97,6 +112,7 @@ log "INFO" "Auto reboot:   $AUTO_REBOOT"
 check_root
 check_log_dir_writable
 check_dnf_not_running
+prompt_subscription_refresh
 
 # --- Step 1: Pre-patch RPM Snapshot ---
 log "INFO" "Taking pre-patch RPM snapshot..."
