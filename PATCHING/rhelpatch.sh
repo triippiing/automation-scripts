@@ -16,6 +16,13 @@ SNAPSHOT_FILE="${LOG_DIR}/rpm_snapshot_${TIMESTAMP}.txt"
 AUTO_REBOOT=false
 SECURITY_ONLY=false
 
+# --- OS Version Detection ---
+RHEL_MAJOR=$(. /etc/os-release && echo "${VERSION_ID%%.*}")
+if [[ "$RHEL_MAJOR" != "8" && "$RHEL_MAJOR" != "9" ]]; then
+    echo "[ERROR] Unsupported OS version: RHEL_MAJOR=$RHEL_MAJOR. Only RHEL 8 and 9 are supported." >&2
+    exit 1
+fi
+
 # --- Colors (only if interactive) ---
 if [[ -t 1 ]]; then
     RED='\033[0;31m'
