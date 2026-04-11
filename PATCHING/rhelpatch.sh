@@ -1,7 +1,7 @@
 #!/bin/bash
 
 ##############################################################################
-# RHEL 9.x System Update & Patching Script
+# RHEL 8.x / 9.x System Update & Patching Script
 ##############################################################################
 
 set -euo pipefail
