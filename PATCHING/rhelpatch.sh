@@ -103,7 +103,7 @@ prompt_subscription_refresh() {
 mkdir -p "$LOG_DIR"
 touch "$LOG_FILE"
 
-log "INFO" "==== RHEL 9 Patching Started ===="
+log "INFO" "==== RHEL ${RHEL_MAJOR} Patching Started ===="
 log "INFO" "Log file:      $LOG_FILE"
 log "INFO" "Snapshot file: $SNAPSHOT_FILE"
 log "INFO" "Security only: $SECURITY_ONLY"
