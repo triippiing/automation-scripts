@@ -62,8 +62,11 @@ check_log_dir_writable() {
 }
 
 check_dnf_not_running() {
-    if pgrep -x dnf &>/dev/null || pgrep -x dnf5 &>/dev/null; then
+    if pgrep -x dnf &>/dev/null; then
         fail "DNF is already running (possibly dnf-automatic). Aborting to avoid conflicts."
+    fi
+    if [[ "$RHEL_MAJOR" == "9" ]] && pgrep -x dnf5 &>/dev/null; then
+        fail "DNF5 is already running. Aborting to avoid conflicts."
     fi
 }
 
