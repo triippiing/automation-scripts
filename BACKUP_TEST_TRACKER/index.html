@@ -67,16 +67,16 @@
         <div><label>OS platform</label>
           <select name="os_platform" required>
             <option value="AIX">AIX</option>
-            <option value="RHEL">RHEL</option>
-            <option value="Other">Other</option>
+            <option value="IBMI">IBMI</option>
+            <option value="x86">x86</option>
           </select>
         </div>
         <div><label>Customer</label><input type="text" name="customer" required /></div>
         <div><label>Technician</label><input type="text" name="technician" required /></div>
         <div><label>Test type</label>
           <select name="test_type" required>
-            <option value="Backup">Backup</option>
-            <option value="Restore">Restore</option>
+            <option value="OnSite">On Site</option>
+            <option value="Remote">Remote</option>
           </select>
         </div>
         <div><label>Status</label>
@@ -102,7 +102,7 @@
     <div class="filters">
       <div>
         <label>OS platform</label>
-        <select id="filter-os"><option value="">All</option><option>AIX</option><option>RHEL</option><option>Other</option></select>
+        <select id="filter-os"><option value="">All</option><option>AIX</option><option>IBMI</option><option>x86</option></select>
       </div>
       <div>
         <label>Technician</label>

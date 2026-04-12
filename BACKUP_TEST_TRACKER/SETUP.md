@@ -40,10 +40,10 @@ Add these fields (all "required" unless noted):
 |---------------|----------|--------------------------------------------|
 | test_date     | Date     | start date                                 |
 | end_date      | Date     | not required — leave blank for single-day  |
-| os_platform   | Select   | values: AIX, RHEL, Other                   |
+| os_platform   | Select   | values: AIX, IBMI, x86                     |
 | customer      | Text     |                                            |
 | technician    | Text     |                                            |
-| test_type     | Select   | values: Backup, Restore                    |
+| test_type     | Select   | values: OnSite, Remote                     |
 | status        | Select   | values: Scheduled, InProgress, Complete, Failed |
 | notes         | Text     | not required                               |
 
