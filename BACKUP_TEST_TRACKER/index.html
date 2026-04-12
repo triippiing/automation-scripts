@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Backup & Recovery Test Tracker</title>
+<style>
+  :root { --bg:#0f1720; --panel:#1a2330; --accent:#4f8cff; --text:#e6edf3; --muted:#8b97a8; --border:#2a3444; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--text); margin:0; padding:24px; }
+  h1 { margin-top:0; }
+  h3 { margin-top:0; }
+  .wrap { max-width: 1200px; margin: 0 auto; }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:20px; margin-bottom:24px; }
+  label { display:block; font-size:13px; color:var(--muted); margin-bottom:4px; }
+  input, select, textarea { width:100%; padding:8px 10px; background:#0b1118; color:var(--text); border:1px solid var(--border); border-radius:4px; font-size:14px; font-family:inherit; }
+  textarea { min-height:60px; resize:vertical; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px; }
+  button { background:var(--accent); color:#fff; border:0; padding:10px 18px; border-radius:4px; font-size:14px; cursor:pointer; margin-top:12px; }
+  button:hover { background:#3b76e0; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { padding:8px 10px; text-align:left; border-bottom:1px solid var(--border); }
+  th { color:var(--muted); font-weight:500; font-size:12px; text-transform:uppercase; }
+  .status { padding:2px 8px; border-radius:10px; font-size:12px; }
+  .status-Scheduled { background:#2a3f5f; }
+  .status-InProgress { background:#5f4e2a; }
+  .status-Complete { background:#2a5f3a; }
+  .status-Failed { background:#5f2a2a; }
+  .row-actions button { background:transparent; color:var(--muted); padding:2px 6px; margin:0 2px; }
+  .row-actions button:hover { color:var(--text); }
+
+  /* Tabs */
+  .tabs { display:flex; gap:4px; margin-bottom:16px; border-bottom:1px solid var(--border); }
+  .tab { padding:10px 18px; cursor:pointer; color:var(--muted); border-bottom:2px solid transparent; }
+  .tab.active { color:var(--text); border-bottom-color:var(--accent); }
+  .view { display:none; }
+  .view.active { display:block; }
+
+  /* Filters */
+  .filters { display:flex; gap:12px; flex-wrap:wrap; align-items:end; margin-bottom:16px; }
+  .filters > div { flex:1; min-width:160px; }
+  .filters .clear { flex:0 0 auto; }
+  .filters .clear button { margin-top:0; background:transparent; border:1px solid var(--border); color:var(--muted); }
+
+  /* Calendar */
+  .cal-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+  .cal-header button { margin:0; background:transparent; border:1px solid var(--border); color:var(--text); padding:6px 12px; }
+  .cal-month { font-size:18px; font-weight:500; }
+  .cal-grid { display:grid; grid-template-columns:repeat(7, 1fr); gap:2px; background:var(--border); border:1px solid var(--border); }
+  .cal-dow { background:var(--panel); padding:8px; text-align:center; font-size:12px; color:var(--muted); text-transform:uppercase; }
+  .cal-day { background:#0b1118; min-height:90px; padding:6px; font-size:12px; position:relative; }
+  .cal-day.other-month { opacity:0.35; }
+  .cal-day.today { outline:2px solid var(--accent); outline-offset:-2px; }
+  .cal-day .date-num { font-weight:500; color:var(--muted); margin-bottom:4px; }
+  .cal-event { display:block; padding:2px 5px; margin-bottom:2px; border-radius:3px; font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:help; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Backup & Recovery Test Tracker</h1>
+
+  <div class="card">
+    <h3>Schedule a test</h3>
+    <form id="test-form">
+      <div class="grid">
+        <div><label>Test date</label><input type="date" name="test_date" required /></div>
+        <div><label>OS platform</label>
+          <select name="os_platform" required>
+            <option value="AIX">AIX</option>
+            <option value="RHEL">RHEL</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div><label>Customer</label><input type="text" name="customer" required /></div>
+        <div><label>Technician</label><input type="text" name="technician" required /></div>
+        <div><label>Test type</label>
+          <select name="test_type" required>
+            <option value="Backup">Backup</option>
+            <option value="Restore">Restore</option>
+          </select>
+        </div>
+        <div><label>Status</label>
+          <select name="status" required>
+            <option value="Scheduled">Scheduled</option>
+            <option value="InProgress">In Progress</option>
+            <option value="Complete">Complete</option>
+            <option value="Failed">Failed</option>
+          </select>
+        </div>
+      </div>
+      <div style="margin-top:12px;"><label>Notes</label><textarea name="notes"></textarea></div>
+      <button type="submit">Save</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <div class="tabs">
+      <div class="tab active" data-view="list">List</div>
+      <div class="tab" data-view="calendar">Calendar</div>
+    </div>
+
+    <div class="filters">
+      <div>
+        <label>OS platform</label>
+        <select id="filter-os"><option value="">All</option><option>AIX</option><option>RHEL</option><option>Other</option></select>
+      </div>
+      <div>
+        <label>Technician</label>
+        <select id="filter-tech"><option value="">All</option></select>
+      </div>
+      <div class="clear"><button id="filter-clear" type="button">Clear filters</button></div>
+    </div>
+
+    <div id="view-list" class="view active">
+      <table id="tests-table">
+        <thead>
+          <tr><th>Date</th><th>OS</th><th>Customer</th><th>Technician</th><th>Type</th><th>Status</th><th>Notes</th><th></th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div id="view-calendar" class="view">
+      <div class="cal-header">
+        <button id="cal-prev">&larr; Prev</button>
+        <div class="cal-month" id="cal-month"></div>
+        <button id="cal-next">Next &rarr;</button>
+      </div>
+      <div class="cal-grid" id="cal-grid"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const PB_URL = window.location.origin;
+const COLLECTION = 'tests';
+
+let ALL = [];
+let calDate = new Date();
+calDate.setDate(1);
+
+async function api(path, opts={}) {
+  const res = await fetch(`${PB_URL}/api/collections/${COLLECTION}/records${path}`, {
+    headers: {'Content-Type':'application/json'}, ...opts,
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+function getFilters() {
+  return { os: document.getElementById('filter-os').value, tech: document.getElementById('filter-tech').value };
+}
+
+function applyFilters(items) {
+  const f = getFilters();
+  return items.filter(t =>
+    (!f.os || t.os_platform === f.os) &&
+    (!f.tech || t.technician === f.tech)
+  );
+}
+
+function refreshTechOptions() {
+  const sel = document.getElementById('filter-tech');
+  const current = sel.value;
+  const techs = [...new Set(ALL.map(t => t.technician).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">All</option>' + techs.map(t => `<option>${t}</option>`).join('');
+  sel.value = current;
+}
+
+async function loadAll() {
+  const data = await api('?sort=-test_date&perPage=500');
+  ALL = data.items;
+  refreshTechOptions();
+  render();
+}
+
+function render() {
+  const filtered = applyFilters(ALL);
+  renderList(filtered);
+  renderCalendar(filtered);
+}
+
+function renderList(items) {
+  const tbody = document.querySelector('#tests-table tbody');
+  tbody.innerHTML = '';
+  for (const t of items) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${t.test_date?.slice(0,10) || ''}</td>
+      <td>${t.os_platform}</td>
+      <td>${t.customer}</td>
+      <td>${t.technician}</td>
+      <td>${t.test_type}</td>
+      <td><span class="status status-${t.status}">${t.status}</span></td>
+      <td>${t.notes || ''}</td>
+      <td class="row-actions"><button data-id="${t.id}" class="del">delete</button></td>
+    `;
+    tbody.appendChild(tr);
+  }
+  tbody.querySelectorAll('.del').forEach(b =>
+    b.onclick = async () => { await api(`/${b.dataset.id}`, {method:'DELETE'}); loadAll(); }
+  );
+}
+
+const STATUS_COLOR = { Scheduled:'#2a3f5f', InProgress:'#5f4e2a', Complete:'#2a5f3a', Failed:'#5f2a2a' };
+
+function renderCalendar(items) {
+  const year = calDate.getFullYear(), month = calDate.getMonth();
+  document.getElementById('cal-month').textContent =
+    calDate.toLocaleString('en-US',{month:'long',year:'numeric'});
+
+  const byDate = {};
+  for (const t of items) {
+    const d = t.test_date?.slice(0,10);
+    if (!d) continue;
+    (byDate[d] = byDate[d] || []).push(t);
+  }
+
+  const first = new Date(year, month, 1);
+  const startOffset = first.getDay();
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+  const todayStr = new Date().toISOString().slice(0,10);
+
+  const grid = document.getElementById('cal-grid');
+  grid.innerHTML = '';
+  for (const d of ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']) {
+    const el = document.createElement('div');
+    el.className = 'cal-dow'; el.textContent = d; grid.appendChild(el);
+  }
+
+  const totalCells = Math.ceil((startOffset + daysInMonth) / 7) * 7;
+  for (let i = 0; i < totalCells; i++) {
+    const dayNum = i - startOffset + 1;
+    const cell = document.createElement('div');
+    cell.className = 'cal-day';
+    let date;
+    if (dayNum < 1) {
+      date = new Date(year, month, dayNum);
+      cell.classList.add('other-month');
+    } else if (dayNum > daysInMonth) {
+      date = new Date(year, month, dayNum);
+      cell.classList.add('other-month');
+    } else {
+      date = new Date(year, month, dayNum);
+    }
+    const iso = date.toISOString().slice(0,10);
+    if (iso === todayStr) cell.classList.add('today');
+    cell.innerHTML = `<div class="date-num">${date.getDate()}</div>`;
+    for (const t of (byDate[iso] || [])) {
+      const ev = document.createElement('span');
+      ev.className = 'cal-event';
+      ev.style.background = STATUS_COLOR[t.status] || '#333';
+      ev.textContent = `${t.customer} — ${t.technician}`;
+      ev.title = `${t.test_type} • ${t.os_platform} • ${t.status}\n${t.customer} — ${t.technician}\n${t.notes || ''}`;
+      cell.appendChild(ev);
+    }
+    grid.appendChild(cell);
+  }
+}
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.onclick = () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('view-' + tab.dataset.view).classList.add('active');
+  };
+});
+
+document.getElementById('cal-prev').onclick = () => { calDate.setMonth(calDate.getMonth()-1); render(); };
+document.getElementById('cal-next').onclick = () => { calDate.setMonth(calDate.getMonth()+1); render(); };
+
+document.getElementById('filter-os').onchange = render;
+document.getElementById('filter-tech').onchange = render;
+document.getElementById('filter-clear').onclick = () => {
+  document.getElementById('filter-os').value = '';
+  document.getElementById('filter-tech').value = '';
+  render();
+};
+
+document.getElementById('test-form').onsubmit = async (e) => {
+  e.preventDefault();
+  const body = Object.fromEntries(new FormData(e.target));
+  await api('', {method:'POST', body: JSON.stringify(body)});
+  e.target.reset();
+  loadAll();
+};
+
+loadAll();
+</script>
+</body>
+</html>
