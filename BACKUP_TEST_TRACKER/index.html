@@ -62,7 +62,8 @@
     <h3>Schedule a test</h3>
     <form id="test-form">
       <div class="grid">
-        <div><label>Test date</label><input type="date" name="test_date" required /></div>
+        <div><label>Start date</label><input type="date" name="test_date" required /></div>
+        <div><label>End date</label><input type="date" name="end_date" /></div>
         <div><label>OS platform</label>
           <select name="os_platform" required>
             <option value="AIX">AIX</option>
@@ -113,7 +114,7 @@
     <div id="view-list" class="view active">
       <table id="tests-table">
         <thead>
-          <tr><th>Date</th><th>OS</th><th>Customer</th><th>Technician</th><th>Type</th><th>Status</th><th>Notes</th><th></th></tr>
+          <tr><th>Start</th><th>End</th><th>OS</th><th>Customer</th><th>Technician</th><th>Type</th><th>Status</th><th>Notes</th><th></th></tr>
         </thead>
         <tbody></tbody>
       </table>
@@ -186,6 +187,7 @@ function renderList(items) {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${t.test_date?.slice(0,10) || ''}</td>
+      <td>${t.end_date?.slice(0,10) || ''}</td>
       <td>${t.os_platform}</td>
       <td>${t.customer}</td>
       <td>${t.technician}</td>
@@ -210,9 +212,16 @@ function renderCalendar(items) {
 
   const byDate = {};
   for (const t of items) {
-    const d = t.test_date?.slice(0,10);
-    if (!d) continue;
-    (byDate[d] = byDate[d] || []).push(t);
+    const start = t.test_date?.slice(0,10);
+    if (!start) continue;
+    const end = t.end_date?.slice(0,10) || start;
+    const cur = new Date(start + 'T00:00:00');
+    const stop = new Date(end + 'T00:00:00');
+    while (cur <= stop) {
+      const iso = cur.toISOString().slice(0,10);
+      (byDate[iso] = byDate[iso] || []).push(t);
+      cur.setDate(cur.getDate() + 1);
+    }
   }
 
   const first = new Date(year, month, 1);
@@ -280,6 +289,7 @@ document.getElementById('filter-clear').onclick = () => {
 document.getElementById('test-form').onsubmit = async (e) => {
   e.preventDefault();
   const body = Object.fromEntries(new FormData(e.target));
+  if (!body.end_date) delete body.end_date;
   await api('', {method:'POST', body: JSON.stringify(body)});
   e.target.reset();
   loadAll();

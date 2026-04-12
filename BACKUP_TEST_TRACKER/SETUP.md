@@ -38,7 +38,8 @@ Add these fields (all "required" unless noted):
 
 | Field         | Type     | Options                                    |
 |---------------|----------|--------------------------------------------|
-| test_date     | Date     |                                            |
+| test_date     | Date     | start date                                 |
+| end_date      | Date     | not required — leave blank for single-day  |
 | os_platform   | Select   | values: AIX, RHEL, Other                   |
 | customer      | Text     |                                            |
 | technician    | Text     |                                            |
