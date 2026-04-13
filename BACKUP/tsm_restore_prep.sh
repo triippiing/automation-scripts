@@ -6,16 +6,14 @@
 # for TSM image mode restores by recreating the VG / LV / mountpoint structure.
 #
 # MODES:
-#   --dryrun      : Prints all commands without executing anything
 #   --prerestore  : Creates VGs, LVs, and mount point directories on target
 #   --postrestore : Writes /etc/filesystems stanzas and optionally mounts
-#
+#   --dryrun      : Prints all commands without executing anything
 #
 # USAGE:
-#   tsm_restore_prep.sh --dryrun      --log <sysinfo_log> [--vg <vgname>|all]
 #   tsm_restore_prep.sh --prerestore  --log <sysinfo_log> [--vg <vgname>|all]
 #   tsm_restore_prep.sh --postrestore --log <sysinfo_log> [--vg <vgname>|all]
-#   
+#   tsm_restore_prep.sh --dryrun      --log <sysinfo_log> [--vg <vgname>|all]
 #
 # NOTES:
 #   - rootvg is always excluded - never recreated via this script
@@ -36,9 +34,9 @@ DRYRUN=0
 RUNBOOK="${PWD}/restore_runbook_$(date +%Y%m%d_%H%M%S).sh"
 
 # Temp working arrays - using files as ksh88 has no associative arrays
-TMPDIR="/tmp/.tsm_restore_$$"
-mkdir -p "${TMPDIR}"
-trap "rm -rf ${TMPDIR}" EXIT INT TERM
+WRKDIR="/tmp/.tsm_restore_$$"
+mkdir -p "${WRKDIR}"
+trap "rm -rf ${WRKDIR}" EXIT INT TERM
 
 # -----------------------------------------------------------------------------
 # Utility functions
@@ -145,21 +143,21 @@ EOF
 # -----------------------------------------------------------------------------
 parse_vg_list() {
     # Reads the [ VG: <name> ] markers from the lsvg -l section
-    # Writes one VG name per line to ${TMPDIR}/vg_list
-    awk '/^\[ VG: /{gsub(/[\[\]]/,""); print $2}' "${LOGFILE}" | \
-        grep -v '^rootvg$' > "${TMPDIR}/vg_list"
+    # Writes one VG name per line to ${WRKDIR}/vg_list
+    awk '/^\[ VG: /{print $3}' "${LOGFILE}" | \
+        grep -v '^rootvg$' > "${WRKDIR}/vg_list"
 
-    if [[ ! -s "${TMPDIR}/vg_list" ]]; then
+    if [[ ! -s "${WRKDIR}/vg_list" ]]; then
         fatal "No non-rootvg volume groups found in log. Check log format."
     fi
 
     if [[ "${TARGET_VG}" != "all" ]]; then
-        if ! grep -qx "${TARGET_VG}" "${TMPDIR}/vg_list"; then
+        if ! grep -qx "${TARGET_VG}" "${WRKDIR}/vg_list"; then
             fatal "VG '${TARGET_VG}' not found in log. Available VGs:"
-            cat "${TMPDIR}/vg_list"
+            cat "${WRKDIR}/vg_list"
             exit 1
         fi
-        echo "${TARGET_VG}" > "${TMPDIR}/vg_list"
+        echo "${TARGET_VG}" > "${WRKDIR}/vg_list"
     fi
 }
 
@@ -167,38 +165,37 @@ parse_vg_list() {
 # PARSER: Extract VG attributes for a given VG from the log
 #
 # Populates:
-#   ${TMPDIR}/vg_<name>_ppsize   - PP size in MB
-#   ${TMPDIR}/vg_<name>_pvlist   - disks assigned to VG on source (for sizing ref)
+#   ${WRKDIR}/vg_<name>_ppsize   - PP size in MB
+#   ${WRKDIR}/vg_<name>_pvlist   - disks assigned to VG on source (for sizing ref)
 # -----------------------------------------------------------------------------
 parse_vg_attrs() {
     local vg="$1"
 
-    # Extract the block between [ VG: <vg> ] and the next [ VG: or section marker
-    # then pull PP SIZE line
-    awk "/^\[ VG: ${vg} \]/{found=1} found && /PP SIZE:/{print; exit} found && /^\[ VG: [^\]]*\]$/ && !/^\[ VG: ${vg} \]/{exit}" \
-        "${LOGFILE}" | \
-        awk -F: '/PP SIZE/{gsub(/ |megabyte.*$/,"",$2); print $2}' \
-        > "${TMPDIR}/vg_${vg}_ppsize"
+    # PP SIZE field appears on same line as VG STATE in lsvg output
+    # e.g: "  VG STATE:  active   PP SIZE:  256 megabyte(s)"
+    # Use pure awk to extract numeric value after PP SIZE: - AIX grep has no -o flag
+    awk "/^\[ VG: ${vg} \]/{found=1}
+         found && /PP SIZE:/{
+             match(\$0, /PP SIZE:[[:space:]]+[0-9]+/)
+             if (RSTART > 0) {
+                 chunk = substr(\$0, RSTART, RLENGTH)
+                 gsub(/PP SIZE:[[:space:]]+/, \"\", chunk)
+                 print chunk
+             }
+             exit
+         }" "${LOGFILE}" > "${WRKDIR}/vg_${vg}_ppsize"
 
-    # Fallback - try alternate field position (lsvg output format can vary)
-    if [[ ! -s "${TMPDIR}/vg_${vg}_ppsize" ]]; then
-        awk "/^\[ VG: ${vg} \]/{found=1} found && /PP SIZE/{found2=1} found2{print; exit}" \
-            "${LOGFILE}" | \
-            grep -oE '[0-9]+ megabyte' | awk '{print $1}' \
-            > "${TMPDIR}/vg_${vg}_ppsize"
-    fi
-
-    local ppsize=$(cat "${TMPDIR}/vg_${vg}_ppsize" 2>/dev/null | tr -d ' \n')
+    local ppsize=$(cat "${WRKDIR}/vg_${vg}_ppsize" 2>/dev/null | tr -d ' \n')
     if [[ -z "${ppsize}" ]]; then
         warn "Could not parse PP size for ${vg} - defaulting to 128MB"
-        echo "128" > "${TMPDIR}/vg_${vg}_ppsize"
+        echo "128" > "${WRKDIR}/vg_${vg}_ppsize"
     fi
 }
 
 # -----------------------------------------------------------------------------
 # PARSER: Extract LV list for a given VG
 #
-# Writes to ${TMPDIR}/vg_<name>_lvs:
+# Writes to ${WRKDIR}/vg_<name>_lvs:
 #   <lvname> <type> <lp_count> <mountpoint>
 #
 # jfs2log, sysdump, boot entries are included but flagged
@@ -212,16 +209,16 @@ parse_lv_list() {
     awk "
         /^\[ VG: ${vg} \]/ { invg=1 }
         invg && /--- Logical Volumes ---/ { intable=1; next }
-        invg && intable && /^  [-]+/ { intable=0 }
+        invg && intable && /^[[:space:]]*${vg}:/ { next }
+        invg && intable && /^--/ { intable=0 }
         invg && intable && /^\[ VG:/ { invg=0; intable=0 }
         invg && intable && NF >= 4 {
-            # Strip leading whitespace, skip header line
             gsub(/^[[:space:]]+/,\"\")
             if (\$1 != \"LV\" && \$1 != \"\") print \$1, \$2, \$3, \$NF
         }
-    " "${LOGFILE}" > "${TMPDIR}/vg_${vg}_lvs"
+    " "${LOGFILE}" > "${WRKDIR}/vg_${vg}_lvs"
 
-    if [[ ! -s "${TMPDIR}/vg_${vg}_lvs" ]]; then
+    if [[ ! -s "${WRKDIR}/vg_${vg}_lvs" ]]; then
         warn "No LVs found for VG: ${vg}"
     fi
 }
@@ -229,23 +226,23 @@ parse_lv_list() {
 # -----------------------------------------------------------------------------
 # TARGET DISK: Interrogate target system for available unassigned disks
 #
-# Writes to ${TMPDIR}/target_disks:
+# Writes to ${WRKDIR}/target_disks:
 #   <diskname> <size_mb>
 # -----------------------------------------------------------------------------
 get_target_disks() {
     log "Interrogating target system for available disks..."
-    > "${TMPDIR}/target_disks"
+    > "${WRKDIR}/target_disks"
 
     lspv 2>/dev/null | while read disk pvid vg rest; do
         # Only consider disks not already in a VG
         if [[ "${vg}" == "None" ]] || [[ -z "${vg}" ]]; then
             size_mb=$(bootinfo -s "${disk}" 2>/dev/null)
             [[ -n "${size_mb}" && "${size_mb}" -gt 0 ]] && \
-                echo "${disk} ${size_mb}" >> "${TMPDIR}/target_disks"
+                echo "${disk} ${size_mb}" >> "${WRKDIR}/target_disks"
         fi
     done
 
-    if [[ ! -s "${TMPDIR}/target_disks" ]]; then
+    if [[ ! -s "${WRKDIR}/target_disks" ]]; then
         fatal "No unassigned disks found on target system. Assign LUNs before running."
     fi
 
@@ -253,7 +250,7 @@ get_target_disks() {
     while read disk size_mb; do
         size_gb=$(echo "scale=1; ${size_mb} / 1024" | bc)
         info "${disk}  ${size_gb} GB"
-    done < "${TMPDIR}/target_disks"
+    done < "${WRKDIR}/target_disks"
     separator
 }
 
@@ -281,46 +278,95 @@ check_disk_capacity() {
 }
 
 # -----------------------------------------------------------------------------
-# DISK SELECTION: Prompt operator to assign a disk to a VG
+# DISK SELECTION: Prompt operator to assign one or more disks to a VG
 #
-# Sets SELECTED_DISK to chosen disk name
+# Sets SELECTED_DISKS (space separated list of disk names)
 # -----------------------------------------------------------------------------
 select_disk_for_vg() {
     local vg="$1"
     local required_mb="$2"
     local required_gb=$(echo "scale=1; ${required_mb} / 1024" | bc)
+    local cumulative_mb=0
+    SELECTED_DISKS=""
 
-    echo ""
-    separator
-    echo "  VG '${vg}' requires approximately ${required_gb} GB"
-    echo "  Available unassigned disks:"
-    echo ""
-    printf "  %-5s  %-12s  %-10s  %-10s\n" "No." "DISK" "SIZE(MB)" "SIZE(GB)"
-    echo "  -----------------------------------------------"
+    while true; do
+        # Rebuild menu each iteration so selected disks disappear from list
+        rm -f "${WRKDIR}/disk_menu_$$"
+        local i=1
+        while read disk size_mb; do
+            # Skip disks already selected this round
+            echo "${SELECTED_DISKS}" | grep -qw "${disk}" && continue
+            local size_gb=$(echo "scale=1; ${size_mb} / 1024" | bc)
+            printf "  %-5s  %-12s  %-10s  %-10s\n" "${i})" "${disk}" "${size_mb}" "${size_gb}"
+            echo "${i} ${disk} ${size_mb}" >> "${WRKDIR}/disk_menu_$$"
+            i=$((i + 1))
+        done < "${WRKDIR}/target_disks"
 
-    local i=1
-    while read disk size_mb; do
-        local size_gb=$(echo "scale=1; ${size_mb} / 1024" | bc)
-        printf "  %-5s  %-12s  %-10s  %-10s\n" "${i})" "${disk}" "${size_mb}" "${size_gb}"
-        echo "${i} ${disk} ${size_mb}" >> "${TMPDIR}/disk_menu_$$"
-        i=$((i + 1))
-    done < "${TMPDIR}/target_disks"
+        local remaining_mb=$((required_mb - cumulative_mb))
+        local remaining_gb=$(echo "scale=1; ${remaining_mb} / 1024" | bc)
+        local cumulative_gb=$(echo "scale=1; ${cumulative_mb} / 1024" | bc)
 
-    echo ""
-    printf "  Select disk number for VG '${vg}': "
-    read DISK_CHOICE
+        echo ""
+        separator
+        echo "  VG '${vg}' - capacity required : ${required_gb} GB"
+        echo "  Allocated so far              : ${cumulative_gb} GB"
+        echo "  Still required                : ${remaining_gb} GB"
+        [[ -n "${SELECTED_DISKS}" ]] && echo "  Disks selected so far         : ${SELECTED_DISKS}"
+        echo ""
+        echo "  Available unassigned disks:"
+        echo ""
+        printf "  %-5s  %-12s  %-10s  %-10s\n" "No." "DISK" "SIZE(MB)" "SIZE(GB)"
+        echo "  -----------------------------------------------"
 
-    SELECTED_DISK=$(awk -v choice="${DISK_CHOICE}" '$1==choice{print $2}' "${TMPDIR}/disk_menu_$$")
-    rm -f "${TMPDIR}/disk_menu_$$"
+        # Reprint the menu (already printed above during build, reprint cleanly)
+        rm -f "${WRKDIR}/disk_menu_$$"
+        i=1
+        while read disk size_mb; do
+            echo "${SELECTED_DISKS}" | grep -qw "${disk}" && continue
+            local size_gb=$(echo "scale=1; ${size_mb} / 1024" | bc)
+            printf "  %-5s  %-12s  %-10s  %-10s\n" "${i})" "${disk}" "${size_mb}" "${size_gb}"
+            echo "${i} ${disk} ${size_mb}" >> "${WRKDIR}/disk_menu_$$"
+            i=$((i + 1))
+        done < "${WRKDIR}/target_disks"
 
-    if [[ -z "${SELECTED_DISK}" ]]; then
-        fatal "Invalid selection."
-    fi
+        echo ""
+        printf "  Select disk number to add to VG '${vg}': "
+        read DISK_CHOICE < /dev/tty
 
-    check_disk_capacity "${SELECTED_DISK}" "${required_mb}" || \
-        fatal "Selected disk ${SELECTED_DISK} is insufficient for VG ${vg}. Aborting."
+        local chosen_disk=$(awk -v c="${DISK_CHOICE}" '$1==c{print $2}' "${WRKDIR}/disk_menu_$$")
+        local chosen_mb=$(awk -v c="${DISK_CHOICE}" '$1==c{print $3}' "${WRKDIR}/disk_menu_$$")
 
-    log "Selected ${SELECTED_DISK} for VG ${vg}"
+        if [[ -z "${chosen_disk}" ]]; then
+            error "Invalid selection - please enter a number from the list."
+            continue
+        fi
+
+        SELECTED_DISKS="${SELECTED_DISKS} ${chosen_disk}"
+        cumulative_mb=$((cumulative_mb + chosen_mb))
+        cumulative_gb=$(echo "scale=1; ${cumulative_mb} / 1024" | bc)
+        log "Added ${chosen_disk} (${cumulative_gb}GB allocated of ${required_gb}GB required)"
+
+        if [[ ${cumulative_mb} -ge ${required_mb} ]]; then
+            log "Sufficient capacity allocated for VG ${vg}."
+            rm -f "${WRKDIR}/disk_menu_$$"
+            break
+        fi
+
+        # Not enough yet - offer to add another or abort
+        echo ""
+        printf "  Capacity not yet met. Add another disk? [Y/n]: "
+        read ADD_MORE < /dev/tty
+        case "${ADD_MORE}" in
+            [Nn]|[Nn][Oo])
+                warn "Proceeding with insufficient capacity - mkvg may fail."
+                rm -f "${WRKDIR}/disk_menu_$$"
+                break
+                ;;
+        esac
+    done
+
+    SELECTED_DISKS=$(echo "${SELECTED_DISKS}" | sed 's/^[[:space:]]*//')
+    log "Final disk selection for VG ${vg}: ${SELECTED_DISKS}"
 }
 
 # -----------------------------------------------------------------------------
@@ -338,13 +384,13 @@ do_prerestore() {
         parse_vg_attrs "${vg}"
         parse_lv_list "${vg}"
 
-        local ppsize=$(cat "${TMPDIR}/vg_${vg}_ppsize" | tr -d ' \n')
+        local ppsize=$(cat "${WRKDIR}/vg_${vg}_ppsize" | tr -d ' \n')
 
         # Calculate total MB required for this VG from LP counts
         local total_lps=0
         while read lvname lvtype lp_count mountpoint; do
             total_lps=$((total_lps + lp_count))
-        done < "${TMPDIR}/vg_${vg}_lvs"
+        done < "${WRKDIR}/vg_${vg}_lvs"
         local required_mb=$((total_lps * ppsize))
         local required_gb=$(echo "scale=1; ${required_mb} / 1024" | bc)
 
@@ -352,20 +398,44 @@ do_prerestore() {
 
         # Disk selection - skip prompt in dryrun, use first available
         if [[ ${DRYRUN} -eq 1 ]]; then
-            SELECTED_DISK=$(awk 'NR==1{print $1}' "${TMPDIR}/target_disks")
-            warn "DRYRUN: Using first available disk (${SELECTED_DISK}) for VG ${vg}"
+            SELECTED_DISKS=$(awk '{print $1}' "${WRKDIR}/target_disks" | tr '\n' ' ' | sed 's/[[:space:]]*$//')
+            warn "DRYRUN: Using all available disks (${SELECTED_DISKS}) for VG ${vg}"
         else
             select_disk_for_vg "${vg}" "${required_mb}"
         fi
 
-        # mkvg - use PP size from source, single disk, no quorum override
+        # mkvg - PP size from source, all selected disks as PV arguments
         echo "" >> "${RUNBOOK}"
         echo "# --- VG: ${vg} ---" >> "${RUNBOOK}"
-        run "mkvg -y ${vg} -s ${ppsize} ${SELECTED_DISK}"
+        run "mkvg -y ${vg} -s ${ppsize} ${SELECTED_DISKS}"
         local rc=$?
         if [[ ${rc} -ne 0 && ${DRYRUN} -eq 0 ]]; then
-            error "mkvg failed for ${vg} - skipping LV creation for this VG"
-            continue
+            # Check if failure was due to residual PVID/VGDA on disks from previous VG
+            error "mkvg failed for ${vg} (rc=${rc})"
+            echo ""
+            echo "  !! One or more disks appear to have residual VGDA data from a previous VG."
+            echo "     This is expected if these disks were previously used and exported."
+            echo "     The -f (force) flag will overwrite the existing VGDA on each disk."
+            echo ""
+            echo "  WARNING: This is destructive. Only proceed if you are certain these"
+            echo "           disks are not members of an active VG on any other system."
+            echo ""
+            printf "  Retry mkvg with -f (force) flag? [y/N]: "
+            read FORCE_ANSWER < /dev/tty
+            case "${FORCE_ANSWER}" in
+                [Yy]|[Yy][Ee][Ss])
+                    run "mkvg -f -y ${vg} -s ${ppsize} ${SELECTED_DISKS}"
+                    rc=$?
+                    if [[ ${rc} -ne 0 ]]; then
+                        error "mkvg -f also failed for ${vg} - skipping LV creation for this VG"
+                        continue
+                    fi
+                    ;;
+                *)
+                    error "Skipping VG ${vg} - mkvg not retried."
+                    continue
+                    ;;
+            esac
         fi
 
         # mklv for each LV in this VG
@@ -396,11 +466,11 @@ do_prerestore() {
                 fi
             fi
 
-        done < "${TMPDIR}/vg_${vg}_lvs"
+        done < "${WRKDIR}/vg_${vg}_lvs"
 
         log "VG ${vg} complete."
 
-    done < "${TMPDIR}/vg_list"
+    done < "${WRKDIR}/vg_list"
 
     separator
     log "Pre-restore preparation complete."
@@ -420,7 +490,7 @@ do_prerestore() {
 do_postrestore() {
     parse_vg_list
 
-    local fs_stanzas="${TMPDIR}/new_fstab_stanzas"
+    local fs_stanzas="${WRKDIR}/new_fstab_stanzas"
     > "${fs_stanzas}"
 
     while read vg; do
@@ -430,7 +500,7 @@ do_postrestore() {
         parse_vg_attrs "${vg}"
         parse_lv_list "${vg}"
 
-        local ppsize=$(cat "${TMPDIR}/vg_${vg}_ppsize" | tr -d ' \n')
+        local ppsize=$(cat "${WRKDIR}/vg_${vg}_ppsize" | tr -d ' \n')
 
         # Find the jfs2log LV for this VG - needed for stanza log= field
         local log_lv=""
@@ -439,7 +509,7 @@ do_postrestore() {
                 log_lv="${lvname}"
                 break
             fi
-        done < "${TMPDIR}/vg_${vg}_lvs"
+        done < "${WRKDIR}/vg_${vg}_lvs"
 
         if [[ -z "${log_lv}" ]]; then
             warn "No jfs2log LV found for ${vg} - log= field will be omitted from stanzas"
@@ -475,9 +545,9 @@ STANZA
 
             info "  Stanza written: ${mountpoint} -> ${dev_path}"
 
-        done < "${TMPDIR}/vg_${vg}_lvs"
+        done < "${WRKDIR}/vg_${vg}_lvs"
 
-    done < "${TMPDIR}/vg_list"
+    done < "${WRKDIR}/vg_list"
 
     # Show generated stanzas for review before applying
     separator
@@ -488,7 +558,7 @@ STANZA
     separator
     echo ""
     printf "  Apply stanzas to /etc/filesystems now? [y/N]: "
-    read APPLY_ANSWER
+    read APPLY_ANSWER < /dev/tty
 
     case "${APPLY_ANSWER}" in
         [Yy]|[Yy][Ee][Ss])
@@ -512,7 +582,7 @@ STANZA
             # Offer to mount all restored filesystems
             echo ""
             printf "  Mount all restored filesystems now? [y/N]: "
-            read MOUNT_ANSWER
+            read MOUNT_ANSWER < /dev/tty
 
             case "${MOUNT_ANSWER}" in
                 [Yy]|[Yy][Ee][Ss])
@@ -527,7 +597,7 @@ STANZA
                                 vg_log_lv="${lvname}"
                                 break
                             fi
-                        done < "${TMPDIR}/vg_${vg}_lvs"
+                        done < "${WRKDIR}/vg_${vg}_lvs"
 
                         while read lvname lvtype lp_count mountpoint; do
                             [[ "${lvtype}" != "jfs2" && "${lvtype}" != "jfs" ]] && continue
@@ -568,8 +638,8 @@ STANZA
                                 log "OK: ${mountpoint} mounted."
                             fi
 
-                        done < "${TMPDIR}/vg_${vg}_lvs"
-                    done < "${TMPDIR}/vg_list"
+                        done < "${WRKDIR}/vg_${vg}_lvs"
+                    done < "${WRKDIR}/vg_list"
 
                     echo ""
                     if [[ ${mount_errors} -gt 0 ]]; then
