@@ -133,11 +133,54 @@
     min-width:160px; max-width:260px; z-index:999; pointer-events:none;
     line-height:1.5;
   }
+  /* ── Auth ── */
+  .login-overlay {
+    display:none; position:fixed; inset:0; background:var(--bg);
+    z-index:2000; align-items:center; justify-content:center;
+  }
+  .login-overlay.open { display:flex; }
+  .login-box {
+    background:var(--panel); border:1px solid var(--border); border-radius:10px;
+    padding:36px 32px; width:100%; max-width:360px;
+  }
+  .login-box h2 { margin:0 0 6px; font-size:18px; }
+  .login-box p  { margin:0 0 24px; font-size:13px; color:var(--muted); }
+  .login-error, .form-error { color:#f87171; font-size:13px; margin-top:10px; min-height:18px; }
+  .topbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; }
+  .topbar h1 { margin:0; }
+  .btn-logout {
+    background:transparent; border:1px solid var(--border); color:var(--muted);
+    padding:6px 14px; font-size:13px; margin-top:0;
+  }
+  .btn-logout:hover { color:var(--text); background:transparent; border-color:var(--muted); }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <h1>Backup &amp; Recovery Test Tracker</h1>
+<!-- Login overlay -->
+<div class="login-overlay open" id="login-overlay">
+  <div class="login-box">
+    <h2>Backup &amp; Recovery Tracker</h2>
+    <p>Sign in to continue</p>
+    <form id="login-form">
+      <div style="margin-bottom:12px;">
+        <label>Email</label>
+        <input type="email" name="email" required autocomplete="username" />
+      </div>
+      <div>
+        <label>Password</label>
+        <input type="password" name="password" required autocomplete="current-password" />
+      </div>
+      <div class="login-error" id="login-error"></div>
+      <button type="submit" style="width:100%;margin-top:16px;">Sign in</button>
+    </form>
+  </div>
+</div>
+
+<div class="wrap" id="app" style="display:none">
+  <div class="topbar">
+    <h1>Backup &amp; Recovery Test Tracker</h1>
+    <button class="btn-logout" id="btn-logout">Sign out</button>
+  </div>
 
   <!-- Forms row -->
   <div class="card-row">
@@ -175,6 +218,7 @@
         </div>
         <div style="margin-top:12px;"><label>Notes</label><textarea name="notes"></textarea></div>
         <button type="submit">Save test</button>
+        <div class="form-error" id="test-form-error"></div>
       </form>
     </div>
 
@@ -189,6 +233,7 @@
         </div>
         <div style="margin-top:12px;"><label>Notes</label><textarea name="notes" placeholder="e.g. Annual leave, bank holiday..."></textarea></div>
         <button class="btn-holiday" type="submit">Save holiday</button>
+        <div class="form-error" id="holiday-form-error"></div>
       </form>
     </div>
 
@@ -293,6 +338,8 @@
     </form>
   </div>
 </div>
+</div><!-- /.wrap #app -->
+
 <!-- Edit holiday modal -->
 <div class="modal-overlay" id="edit-holiday-modal">
   <div class="modal" style="max-width:500px">
@@ -330,10 +377,52 @@ const STATUS_COLOR = {
   Scheduled:'#2a3f5f', InProgress:'#5f4e2a', Complete:'#2a5f3a', Failed:'#5f2a2a'
 };
 
+/* ── Auth ── */
+
+let authToken = localStorage.getItem('pb_token') || '';
+
+function showApp()   {
+  document.getElementById('login-overlay').classList.remove('open');
+  document.getElementById('app').style.display = 'block';
+}
+function showLogin() {
+  document.getElementById('login-overlay').classList.add('open');
+  document.getElementById('app').style.display = 'none';
+  authToken = '';
+  localStorage.removeItem('pb_token');
+}
+
+document.getElementById('login-form').onsubmit = async (e) => {
+  e.preventDefault();
+  const { email, password } = Object.fromEntries(new FormData(e.target));
+  const errEl = document.getElementById('login-error');
+  errEl.textContent = '';
+  try {
+    const res = await fetch(`${PB_URL}/api/collections/users/auth-with-password`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ identity: email, password })
+    });
+    if (!res.ok) throw new Error('Invalid email or password.');
+    const data = await res.json();
+    authToken = data.token;
+    localStorage.setItem('pb_token', authToken);
+    showApp();
+    loadAll();
+  } catch (err) {
+    errEl.textContent = err.message;
+  }
+};
+
+document.getElementById('btn-logout').onclick = () => showLogin();
+
 async function pbApi(collection, path='', opts={}) {
+  const headers = { 'Content-Type':'application/json' };
+  if (authToken) headers['Authorization'] = authToken;
   const res = await fetch(`${PB_URL}/api/collections/${collection}/records${path}`, {
-    headers:{'Content-Type':'application/json'}, ...opts
+    headers, ...opts
   });
+  if (res.status === 401) { showLogin(); return null; }
   if (!res.ok) throw new Error(await res.text());
   if (res.status === 204) return null;
   return res.json();
@@ -346,6 +435,7 @@ async function loadAll() {
     pbApi('tests', '?sort=-test_date&perPage=500'),
     pbApi('holidays', '?sort=-start_date&perPage=500')
   ]);
+  if (!testData || !holData) return; // 401 → showLogin already called
   ALL = testData.items;
   HOLIDAYS = holData.items;
   refreshTechOptions();
@@ -606,12 +696,18 @@ document.getElementById('edit-holiday-modal').onclick = (e) => {
 
 document.getElementById('edit-holiday-form').onsubmit = async (e) => {
   e.preventDefault();
-  const data = Object.fromEntries(new FormData(e.target));
-  const id   = data.id;
-  delete data.id;
-  await pbApi('holidays', `/${id}`, {method:'PATCH', body:JSON.stringify(data)});
-  document.getElementById('edit-holiday-modal').classList.remove('open');
-  loadAll();
+  try {
+    const data = Object.fromEntries(new FormData(e.target));
+    const id   = data.id;
+    delete data.id;
+    const result = await pbApi('holidays', `/${id}`, {method:'PATCH', body:JSON.stringify(data)});
+    if (result !== undefined) {
+      document.getElementById('edit-holiday-modal').classList.remove('open');
+      loadAll();
+    }
+  } catch(err) {
+    alert('Save failed: ' + err.message);
+  }
 };
 
 /* ── Edit test modal ── */
@@ -642,13 +738,19 @@ document.getElementById('edit-modal').onclick = (e) => {
 
 document.getElementById('edit-form').onsubmit = async (e) => {
   e.preventDefault();
-  const data = Object.fromEntries(new FormData(e.target));
-  const id   = data.id;
-  delete data.id;
-  if (!data.end_date) delete data.end_date;
-  await pbApi('tests', `/${id}`, {method:'PATCH', body:JSON.stringify(data)});
-  document.getElementById('edit-modal').classList.remove('open');
-  loadAll();
+  try {
+    const data = Object.fromEntries(new FormData(e.target));
+    const id   = data.id;
+    delete data.id;
+    if (!data.end_date) delete data.end_date;
+    const result = await pbApi('tests', `/${id}`, {method:'PATCH', body:JSON.stringify(data)});
+    if (result !== undefined) {
+      document.getElementById('edit-modal').classList.remove('open');
+      loadAll();
+    }
+  } catch(err) {
+    alert('Save failed: ' + err.message);
+  }
 };
 
 /* ── Month modal (year calendar expand) ── */
@@ -744,24 +846,45 @@ document.getElementById('filter-clear').onclick  = () => {
 
 document.getElementById('test-form').onsubmit = async (e) => {
   e.preventDefault();
-  const body = Object.fromEntries(new FormData(e.target));
-  if (!body.end_date) delete body.end_date;
-  await pbApi('tests', '', {method:'POST', body:JSON.stringify(body)});
-  e.target.reset();
-  loadAll();
+  const errEl = document.getElementById('test-form-error');
+  errEl.textContent = '';
+  try {
+    const body = Object.fromEntries(new FormData(e.target));
+    if (!body.end_date) delete body.end_date;
+    const result = await pbApi('tests', '', {method:'POST', body:JSON.stringify(body)});
+    if (result) { e.target.reset(); loadAll(); }
+  } catch(err) {
+    errEl.textContent = 'Save failed: ' + err.message;
+  }
 };
 
 document.getElementById('holiday-form').onsubmit = async (e) => {
   e.preventDefault();
-  const body = Object.fromEntries(new FormData(e.target));
-  await pbApi('holidays', '', {method:'POST', body:JSON.stringify(body)});
-  e.target.reset();
-  loadAll();
+  const errEl = document.getElementById('holiday-form-error');
+  errEl.textContent = '';
+  try {
+    const body = Object.fromEntries(new FormData(e.target));
+    const result = await pbApi('holidays', '', {method:'POST', body:JSON.stringify(body)});
+    if (result) { e.target.reset(); loadAll(); }
+  } catch(err) {
+    errEl.textContent = 'Save failed: ' + err.message;
+  }
 };
 
 /* ── Boot ── */
 
-loadAll();
+if (authToken) {
+  // Validate stored token is still good with a lightweight auth-refresh call
+  fetch(`${PB_URL}/api/collections/users/auth-refresh`, {
+    method: 'POST',
+    headers: { 'Authorization': authToken }
+  }).then(r => {
+    if (r.ok) { showApp(); loadAll(); }
+    else showLogin();
+  }).catch(() => showLogin());
+} else {
+  showLogin();
+}
 </script>
 </body>
 </html>
