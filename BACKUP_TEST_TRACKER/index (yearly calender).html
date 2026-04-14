@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Backup & Recovery Test Tracker</title>
+<style>
+  :root {
+    --bg:#0f1720; --panel:#1a2330; --accent:#4f8cff; --text:#e6edf3;
+    --muted:#8b97a8; --border:#2a3444; --holiday:#c084fc;
+    --holiday-bg:#3b1f5e;
+  }
+  * { box-sizing:border-box; }
+  body { font-family:-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--text); margin:0; padding:24px; }
+  h1 { margin-top:0; }
+  h3 { margin-top:0; }
+  .wrap { max-width:1400px; margin:0 auto; }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:20px; margin-bottom:24px; }
+  .card-row { display:grid; grid-template-columns:1fr 1fr; gap:24px; }
+  @media(max-width:900px){ .card-row { grid-template-columns:1fr; } }
+  label { display:block; font-size:13px; color:var(--muted); margin-bottom:4px; }
+  input, select, textarea { width:100%; padding:8px 10px; background:#0b1118; color:var(--text); border:1px solid var(--border); border-radius:4px; font-size:14px; font-family:inherit; }
+  textarea { min-height:60px; resize:vertical; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; }
+  button { background:var(--accent); color:#fff; border:0; padding:10px 18px; border-radius:4px; font-size:14px; cursor:pointer; margin-top:12px; }
+  button:hover { background:#3b76e0; }
+  .btn-holiday { background:#7c3aed; }
+  .btn-holiday:hover { background:#6d28d9; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th,td { padding:8px 10px; text-align:left; border-bottom:1px solid var(--border); }
+  th { color:var(--muted); font-weight:500; font-size:12px; text-transform:uppercase; }
+  .status { padding:2px 8px; border-radius:10px; font-size:12px; }
+  .status-Scheduled { background:#2a3f5f; }
+  .status-InProgress { background:#5f4e2a; }
+  .status-Complete { background:#2a5f3a; }
+  .status-Failed { background:#5f2a2a; }
+  .tag-holiday { background:var(--holiday-bg); color:var(--holiday); padding:2px 8px; border-radius:10px; font-size:12px; }
+  .row-actions button { background:transparent; color:var(--muted); padding:2px 6px; margin:0 2px; }
+  .row-actions button:hover { color:var(--text); }
+
+  /* Tabs */
+  .tabs { display:flex; gap:4px; margin-bottom:16px; border-bottom:1px solid var(--border); }
+  .tab { padding:10px 18px; cursor:pointer; color:var(--muted); border-bottom:2px solid transparent; }
+  .tab.active { color:var(--text); border-bottom-color:var(--accent); }
+  .view { display:none; }
+  .view.active { display:block; }
+
+  /* Filters */
+  .filters { display:flex; gap:12px; flex-wrap:wrap; align-items:end; margin-bottom:16px; }
+  .filters > div { flex:1; min-width:160px; }
+  .filters .clear button { margin-top:0; background:transparent; border:1px solid var(--border); color:var(--muted); }
+
+  /* ── Year Calendar ── */
+  .cal-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+  .cal-header button { margin:0; background:transparent; border:1px solid var(--border); color:var(--text); padding:6px 14px; }
+  .cal-year-label { font-size:20px; font-weight:600; }
+
+  .year-grid {
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:16px;
+  }
+  @media(max-width:1100px){ .year-grid { grid-template-columns:repeat(3,1fr); } }
+  @media(max-width:780px)  { .year-grid { grid-template-columns:repeat(2,1fr); } }
+  @media(max-width:480px)  { .year-grid { grid-template-columns:1fr; } }
+
+  .mini-month { background:#0b1118; border:1px solid var(--border); border-radius:6px; padding:10px; }
+  .mini-month-title { font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--accent); margin-bottom:8px; text-align:center; }
+  .mini-cal { display:grid; grid-template-columns:repeat(7,1fr); gap:1px; }
+  .mini-dow { font-size:9px; color:var(--muted); text-align:center; padding:2px 0 4px; text-transform:uppercase; }
+  .mini-day {
+    font-size:11px; text-align:center; padding:3px 1px;
+    border-radius:3px; position:relative; cursor:default;
+    line-height:1.2;
+  }
+  .mini-day.other-month { color:#3a4555; }
+  .mini-day.today { background:var(--accent); color:#fff; border-radius:50%; font-weight:700; }
+  .mini-day .dots { display:flex; flex-wrap:wrap; justify-content:center; gap:1px; margin-top:2px; min-height:5px; }
+  .dot { width:5px; height:5px; border-radius:50%; flex-shrink:0; }
+
+  /* Legend */
+  .legend { display:flex; gap:16px; flex-wrap:wrap; margin-bottom:16px; font-size:12px; align-items:center; }
+  .legend-item { display:flex; align-items:center; gap:6px; }
+  .legend-dot { width:10px; height:10px; border-radius:50%; }
+
+  /* Tooltip */
+  [data-tip] { position:relative; }
+  [data-tip]:hover::after {
+    content:attr(data-tip);
+    position:absolute; bottom:calc(100% + 6px); left:50%; transform:translateX(-50%);
+    background:#1e2d3f; border:1px solid var(--border); color:var(--text);
+    font-size:11px; padding:6px 8px; border-radius:4px; white-space:pre-wrap;
+    min-width:160px; max-width:260px; z-index:999; pointer-events:none;
+    line-height:1.5;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Backup &amp; Recovery Test Tracker</h1>
+
+  <!-- Forms row -->
+  <div class="card-row">
+
+    <!-- Test form -->
+    <div class="card">
+      <h3>Schedule a recovery test</h3>
+      <form id="test-form">
+        <div class="grid">
+          <div><label>Start date</label><input type="date" name="test_date" required /></div>
+          <div><label>End date</label><input type="date" name="end_date" /></div>
+          <div><label>OS platform</label>
+            <select name="os_platform" required>
+              <option value="AIX">AIX</option>
+              <option value="IBMI">IBMI</option>
+              <option value="x86">x86</option>
+            </select>
+          </div>
+          <div><label>Customer</label><input type="text" name="customer" required /></div>
+          <div><label>Technician</label><input type="text" name="technician" required /></div>
+          <div><label>Test type</label>
+            <select name="test_type" required>
+              <option value="OnSite">On Site</option>
+              <option value="Remote">Remote</option>
+            </select>
+          </div>
+          <div><label>Status</label>
+            <select name="status" required>
+              <option value="Scheduled">Scheduled</option>
+              <option value="InProgress">In Progress</option>
+              <option value="Complete">Complete</option>
+              <option value="Failed">Failed</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-top:12px;"><label>Notes</label><textarea name="notes"></textarea></div>
+        <button type="submit">Save test</button>
+      </form>
+    </div>
+
+    <!-- Holiday form -->
+    <div class="card">
+      <h3>Book technician holiday</h3>
+      <form id="holiday-form">
+        <div class="grid">
+          <div><label>Technician</label><input type="text" name="technician" required /></div>
+          <div><label>Start date</label><input type="date" name="start_date" required /></div>
+          <div><label>End date</label><input type="date" name="end_date" required /></div>
+        </div>
+        <div style="margin-top:12px;"><label>Notes</label><textarea name="notes" placeholder="e.g. Annual leave, bank holiday..."></textarea></div>
+        <button class="btn-holiday" type="submit">Save holiday</button>
+      </form>
+    </div>
+
+  </div>
+
+  <!-- Views -->
+  <div class="card">
+    <div class="tabs">
+      <div class="tab active" data-view="list">Tests</div>
+      <div class="tab" data-view="holidays">Holidays</div>
+      <div class="tab" data-view="calendar">Year calendar</div>
+    </div>
+
+    <!-- Shared filters (used by list + calendar) -->
+    <div class="filters" id="shared-filters">
+      <div><label>OS platform</label>
+        <select id="filter-os"><option value="">All</option><option>AIX</option><option>IBMI</option><option>x86</option></select>
+      </div>
+      <div><label>Technician</label>
+        <select id="filter-tech"><option value="">All</option></select>
+      </div>
+      <div class="clear"><button id="filter-clear" type="button">Clear filters</button></div>
+    </div>
+
+    <!-- Tests list -->
+    <div id="view-list" class="view active">
+      <table id="tests-table">
+        <thead>
+          <tr><th>Start</th><th>End</th><th>OS</th><th>Customer</th><th>Technician</th><th>Type</th><th>Status</th><th>Notes</th><th></th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <!-- Holidays list -->
+    <div id="view-holidays" class="view">
+      <table id="holidays-table">
+        <thead>
+          <tr><th>Technician</th><th>Start</th><th>End</th><th>Notes</th><th></th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <!-- Year calendar -->
+    <div id="view-calendar" class="view">
+      <div class="cal-header">
+        <button id="cal-prev">&larr; Prev</button>
+        <div class="cal-year-label" id="cal-year"></div>
+        <button id="cal-next">Next &rarr;</button>
+      </div>
+      <div class="legend" id="cal-legend">
+        <span style="color:var(--muted);font-size:12px;">Tests:</span>
+        <div class="legend-item"><div class="legend-dot" style="background:#2a3f5f"></div> Scheduled</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#5f4e2a"></div> In Progress</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#2a5f3a"></div> Complete</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#5f2a2a"></div> Failed</div>
+        <span style="color:var(--muted);font-size:12px;margin-left:8px;">Leave:</span>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--holiday)"></div> Holiday</div>
+      </div>
+      <div class="year-grid" id="year-grid"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const PB_URL = window.location.origin;
+
+let ALL = [];
+let HOLIDAYS = [];
+let calYear = new Date().getFullYear();
+
+const STATUS_COLOR = {
+  Scheduled:'#2a3f5f', InProgress:'#5f4e2a', Complete:'#2a5f3a', Failed:'#5f2a2a'
+};
+
+async function pbApi(collection, path='', opts={}) {
+  const res = await fetch(`${PB_URL}/api/collections/${collection}/records${path}`, {
+    headers:{'Content-Type':'application/json'}, ...opts
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+/* ── Data Loading ── */
+
+async function loadAll() {
+  const [testData, holData] = await Promise.all([
+    pbApi('tests', '?sort=-test_date&perPage=500'),
+    pbApi('holidays', '?sort=-start_date&perPage=500')
+  ]);
+  ALL = testData.items;
+  HOLIDAYS = holData.items;
+  refreshTechOptions();
+  render();
+}
+
+/* ── Filters ── */
+
+function getFilters() {
+  return {
+    os:   document.getElementById('filter-os').value,
+    tech: document.getElementById('filter-tech').value
+  };
+}
+
+function applyTestFilters(items) {
+  const f = getFilters();
+  return items.filter(t =>
+    (!f.os   || t.os_platform === f.os) &&
+    (!f.tech || t.technician  === f.tech)
+  );
+}
+
+function applyHolidayFilters(items) {
+  const f = getFilters();
+  return items.filter(h => !f.tech || h.technician === f.tech);
+}
+
+function refreshTechOptions() {
+  const sel = document.getElementById('filter-tech');
+  const current = sel.value;
+  const techs = [...new Set([
+    ...ALL.map(t => t.technician),
+    ...HOLIDAYS.map(h => h.technician)
+  ].filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">All</option>' + techs.map(t => `<option>${t}</option>`).join('');
+  sel.value = current;
+}
+
+/* ── Render dispatch ── */
+
+function render() {
+  const filteredTests    = applyTestFilters(ALL);
+  const filteredHolidays = applyHolidayFilters(HOLIDAYS);
+  renderList(filteredTests);
+  renderHolidayList(filteredHolidays);
+  renderYearCalendar(filteredTests, filteredHolidays);
+}
+
+/* ── Tests list ── */
+
+function renderList(items) {
+  const tbody = document.querySelector('#tests-table tbody');
+  tbody.innerHTML = '';
+  for (const t of items) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${t.test_date?.slice(0,10)||''}</td>
+      <td>${t.end_date?.slice(0,10)||''}</td>
+      <td>${t.os_platform}</td>
+      <td>${t.customer}</td>
+      <td>${t.technician}</td>
+      <td>${t.test_type}</td>
+      <td><span class="status status-${t.status}">${t.status}</span></td>
+      <td>${t.notes||''}</td>
+      <td class="row-actions"><button data-id="${t.id}" class="del-test">del</button></td>
+    `;
+    tbody.appendChild(tr);
+  }
+  tbody.querySelectorAll('.del-test').forEach(b =>
+    b.onclick = async () => { await pbApi('tests',`/${b.dataset.id}`,{method:'DELETE'}); loadAll(); }
+  );
+}
+
+/* ── Holiday list ── */
+
+function renderHolidayList(items) {
+  const tbody = document.querySelector('#holidays-table tbody');
+  tbody.innerHTML = '';
+  for (const h of items) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${h.technician}</td>
+      <td>${h.start_date?.slice(0,10)||''}</td>
+      <td>${h.end_date?.slice(0,10)||''}</td>
+      <td>${h.notes||''}</td>
+      <td class="row-actions"><button data-id="${h.id}" class="del-hol">del</button></td>
+    `;
+    tbody.appendChild(tr);
+  }
+  tbody.querySelectorAll('.del-hol').forEach(b =>
+    b.onclick = async () => { await pbApi('holidays',`/${b.dataset.id}`,{method:'DELETE'}); loadAll(); }
+  );
+}
+
+/* ── Year calendar ── */
+
+function buildDateMap(tests, holidays) {
+  const map = {}; // iso -> [{type, color, label, tip}]
+
+  function addRange(startIso, endIso, entry) {
+    const cur  = new Date(startIso + 'T00:00:00');
+    const stop = new Date(endIso   + 'T00:00:00');
+    while (cur <= stop) {
+      const iso = cur.toISOString().slice(0,10);
+      (map[iso] = map[iso] || []).push(entry);
+      cur.setDate(cur.getDate()+1);
+    }
+  }
+
+  for (const t of tests) {
+    const start = t.test_date?.slice(0,10);
+    if (!start) continue;
+    const end = t.end_date?.slice(0,10) || start;
+    addRange(start, end, {
+      color: STATUS_COLOR[t.status] || '#333',
+      tip: `[${t.status}] ${t.customer} — ${t.technician}\n${t.os_platform} / ${t.test_type}${t.notes ? '\n'+t.notes : ''}`
+    });
+  }
+
+  for (const h of holidays) {
+    const start = h.start_date?.slice(0,10);
+    const end   = h.end_date?.slice(0,10);
+    if (!start || !end) continue;
+    addRange(start, end, {
+      color: 'var(--holiday)',
+      tip: `[Holiday] ${h.technician}${h.notes ? '\n'+h.notes : ''}`
+    });
+  }
+
+  return map;
+}
+
+const MONTH_NAMES = ['January','February','March','April','May','June',
+                     'July','August','September','October','November','December'];
+
+function renderYearCalendar(tests, holidays) {
+  document.getElementById('cal-year').textContent = calYear;
+  const dateMap  = buildDateMap(tests, holidays);
+  const todayStr = new Date().toISOString().slice(0,10);
+  const grid     = document.getElementById('year-grid');
+  grid.innerHTML = '';
+
+  for (let m = 0; m < 12; m++) {
+    const monthDiv = document.createElement('div');
+    monthDiv.className = 'mini-month';
+
+    const title = document.createElement('div');
+    title.className = 'mini-month-title';
+    title.textContent = MONTH_NAMES[m];
+    monthDiv.appendChild(title);
+
+    const calDiv = document.createElement('div');
+    calDiv.className = 'mini-cal';
+
+    // Day-of-week headers
+    for (const d of ['S','M','T','W','T','F','S']) {
+      const el = document.createElement('div');
+      el.className = 'mini-dow';
+      el.textContent = d;
+      calDiv.appendChild(el);
+    }
+
+    const firstDay    = new Date(calYear, m, 1).getDay();
+    const daysInMonth = new Date(calYear, m+1, 0).getDate();
+    const totalCells  = Math.ceil((firstDay + daysInMonth) / 7) * 7;
+
+    for (let i = 0; i < totalCells; i++) {
+      const dayNum = i - firstDay + 1;
+      const cell   = document.createElement('div');
+      cell.className = 'mini-day';
+
+      if (dayNum < 1 || dayNum > daysInMonth) {
+        cell.classList.add('other-month');
+        cell.innerHTML = `<div></div><div class="dots"></div>`;
+        calDiv.appendChild(cell);
+        continue;
+      }
+
+      const date = new Date(calYear, m, dayNum);
+      const iso  = date.toISOString().slice(0,10);
+      if (iso === todayStr) cell.classList.add('today');
+
+      const events = dateMap[iso] || [];
+      const dotsHtml = events.map(e =>
+        `<div class="dot" style="background:${e.color}"></div>`
+      ).join('');
+
+      if (events.length > 0) {
+        const tipText = [...new Set(events.map(e => e.tip))].join('\n\n');
+        cell.setAttribute('data-tip', tipText);
+      }
+
+      cell.innerHTML = `<div>${dayNum}</div><div class="dots">${dotsHtml}</div>`;
+      calDiv.appendChild(cell);
+    }
+
+    monthDiv.appendChild(calDiv);
+    grid.appendChild(monthDiv);
+  }
+}
+
+/* ── Tabs ── */
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.onclick = () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('view-' + tab.dataset.view).classList.add('active');
+  };
+});
+
+/* ── Calendar nav ── */
+
+document.getElementById('cal-prev').onclick = () => { calYear--; render(); };
+document.getElementById('cal-next').onclick = () => { calYear++; render(); };
+
+/* ── Filter events ── */
+
+document.getElementById('filter-os').onchange    = render;
+document.getElementById('filter-tech').onchange  = render;
+document.getElementById('filter-clear').onclick  = () => {
+  document.getElementById('filter-os').value   = '';
+  document.getElementById('filter-tech').value = '';
+  render();
+};
+
+/* ── Form submissions ── */
+
+document.getElementById('test-form').onsubmit = async (e) => {
+  e.preventDefault();
+  const body = Object.fromEntries(new FormData(e.target));
+  if (!body.end_date) delete body.end_date;
+  await pbApi('tests', '', {method:'POST', body:JSON.stringify(body)});
+  e.target.reset();
+  loadAll();
+};
+
+document.getElementById('holiday-form').onsubmit = async (e) => {
+  e.preventDefault();
+  const body = Object.fromEntries(new FormData(e.target));
+  await pbApi('holidays', '', {method:'POST', body:JSON.stringify(body)});
+  e.target.reset();
+  loadAll();
+};
+
+/* ── Boot ── */
+
+loadAll();
+</script>
+</body>
+</html>
