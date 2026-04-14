@@ -36,18 +36,18 @@ In the admin UI → **Collections** → **New collection** → name it `tests`.
 
 Add these fields (all "required" unless noted):
 
-| Field         | Type     | Options                                                    |
-|---------------|----------|------------------------------------------------------------|
-| test_date     | Date     | start date                                                 |
-| end_date      | Date     | not required — leave blank for single-day                  |
-| os_platform   | Select   | values: AIX, IBMI, x86, Multi Platform — set to Multiple   |
-| customer      | Text     |                                                            |
-| technician    | Select   | values: your team — set to Multiple (see section 6)        |
-| test_type     | Select   | values: OnSite, Remote                                     |
-| region        | Select   | values: Canada, North America, UK                          |
-| recovery_type | Select   | values: Backup and Recovery, Role swap                     |
-| status        | Select   | values: Scheduled, InProgress, Complete, Failed            |
-| notes         | Text     | not required                                               |
+| Field         | Type   | Options / Notes                                                          |
+|---------------|--------|--------------------------------------------------------------------------|
+| test_date     | Date   | required — start date                                                    |
+| end_date      | Date   | not required — leave blank for single-day                                |
+| os_platform   | Select | values: AIX, IBMI, x86, Multi Platform — set to **Multiple**            |
+| customer      | Text   | required                                                                 |
+| technician    | Select | populated from `technicians` collection — set to **Multiple**            |
+| test_type     | Select | values: OnSite, Remote                                                   |
+| region        | Select | values: Canada, North America, UK                                        |
+| recovery_type | Select | values: Backup and Recovery, Role swap, Invocation                       |
+| status        | Select | values: Scheduled, InProgress, Complete, Failed, DateOffered             |
+| notes         | Text   | not required                                                             |
 
 ## 5. Create the `holidays` collection
 
@@ -55,12 +55,12 @@ In the admin UI → **Collections** → **New collection** → name it `holidays
 
 Add these fields:
 
-| Field       | Type | Options      |
-|-------------|------|--------------|
-| technician  | Text | required     |
-| start_date  | Date | required     |
-| end_date    | Date | required     |
-| notes       | Text | not required |
+| Field       | Type   | Options                                           |
+|-------------|--------|---------------------------------------------------|
+| technician  | Select | populated from `technicians` collection — Multiple |
+| start_date  | Date   | required                                          |
+| end_date    | Date   | required                                          |
+| notes       | Text   | not required                                      |
 
 ## 6. Create the `technicians` collection
 
@@ -92,9 +92,9 @@ Repeat for each user who needs access. Users can only be created/deleted by the 
 
 ## 8. Set the collection API rules
 
-Both `tests` and `holidays` collections must require auth, otherwise the API is open to unauthenticated requests even with the login screen in place.
+All three collections (`tests`, `holidays`, `technicians`) must require auth, otherwise the API is open to unauthenticated requests even with the login screen in place.
 
-In the admin UI → **Collections** → select `tests` → **API Rules** tab.
+In the admin UI → **Collections** → select a collection → **API Rules** tab.
 
 Set all 5 rules (List, View, Create, Update, Delete) to:
 
@@ -102,7 +102,7 @@ Set all 5 rules (List, View, Create, Update, Delete) to:
 @request.auth.id != ""
 ```
 
-Repeat for the `holidays` collection.
+Repeat for all three collections: `tests`, `holidays`, and `technicians`.
 
 > **Important — "Locked" is not the same as auth-required.**
 > Locked = nobody can access, including authenticated users (returns 403).
@@ -159,7 +159,7 @@ To also get a JSON export of each collection (useful for scripted restores):
   > /backup/holidays-$(date +\%F).json
 
 0 2 * * * sqlite3 /opt/pocketbase/pb_data/data.db \
-  "SELECT json_group_array(json_object('id',id,'test_date',test_date,'end_date',end_date,'os_platform',os_platform,'customer',customer,'technician',technician,'test_type',test_type,'status',status,'notes',notes)) FROM tests" \
+  "SELECT json_group_array(json_object('id',id,'test_date',test_date,'end_date',end_date,'os_platform',os_platform,'customer',customer,'technician',technician,'test_type',test_type,'region',region,'recovery_type',recovery_type,'status',status,'notes',notes)) FROM tests" \
   > /backup/tests-$(date +\%F).json
 ```
 
