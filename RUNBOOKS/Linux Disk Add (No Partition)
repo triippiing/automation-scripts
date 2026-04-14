@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Veeam Linux Repo — Disk Provisioning Runbook</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #0d0f12;
+    --surface:   #13171d;
+    --border:    #1e2530;
+    --border-hi: #2e3a4a;
+    --green:     #39d353;
+    --green-dim: #1f7a30;
+    --cyan:      #58c9e8;
+    --amber:     #f0a30a;
+    --red:       #e05c5c;
+    --text:      #c9d1d9;
+    --text-dim:  #6e7e91;
+    --text-hi:   #e6edf3;
+    --header-h:  56px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  /* ── header ── */
+  header {
+    height: var(--header-h);
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 32px;
+    gap: 16px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    flex-shrink: 0;
+    animation: pulse 2.5s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%,100% { opacity:1; box-shadow: 0 0 8px var(--green); }
+    50%      { opacity:.5; box-shadow: 0 0 2px var(--green); }
+  }
+
+  header h1 {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-hi);
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+
+  .badge {
+    margin-left: auto;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    border: 1px solid var(--border-hi);
+    padding: 2px 10px;
+    border-radius: 3px;
+    letter-spacing: .05em;
+  }
+
+  /* ── layout ── */
+  .wrap {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 40px 32px 80px;
+  }
+
+  /* ── meta block ── */
+  .meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    margin-bottom: 40px;
+    animation: fadeUp .4s ease both;
+  }
+
+  .meta-cell {
+    background: var(--surface);
+    padding: 14px 18px;
+  }
+
+  .meta-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+
+  .meta-val {
+    font-size: 13px;
+    color: var(--text-hi);
+    font-weight: 600;
+  }
+
+  /* ── section title ── */
+  .section-title {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* ── steps ── */
+  .steps { display: flex; flex-direction: column; gap: 12px; }
+
+  .step {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--border-hi);
+    border-radius: 0 6px 6px 0;
+    overflow: hidden;
+    opacity: 0;
+    animation: fadeUp .35s ease both;
+  }
+
+  .step:nth-child(1)  { animation-delay: .05s; border-left-color: var(--cyan); }
+  .step:nth-child(2)  { animation-delay: .10s; }
+  .step:nth-child(3)  { animation-delay: .15s; }
+  .step:nth-child(4)  { animation-delay: .20s; }
+  .step:nth-child(5)  { animation-delay: .25s; }
+  .step:nth-child(6)  { animation-delay: .30s; border-left-color: var(--amber); }
+  .step:nth-child(7)  { animation-delay: .35s; }
+  .step:nth-child(8)  { animation-delay: .40s; }
+  .step:nth-child(9)  { animation-delay: .45s; }
+  .step:nth-child(10) { animation-delay: .50s; border-left-color: var(--green); }
+
+  .step-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    cursor: pointer;
+    user-select: none;
+    border-bottom: 1px solid transparent;
+    transition: background .15s;
+  }
+
+  .step-header:hover { background: rgba(255,255,255,.03); }
+  .step.open .step-header { border-bottom-color: var(--border); }
+
+  .step-num {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    min-width: 24px;
+  }
+
+  .step-title {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--text-hi);
+    flex: 1;
+  }
+
+  .step-chevron {
+    font-size: 10px;
+    color: var(--text-dim);
+    transition: transform .2s;
+  }
+
+  .step.open .step-chevron { transform: rotate(90deg); }
+
+  .step-body {
+    display: none;
+    padding: 16px;
+  }
+
+  .step.open .step-body { display: block; }
+
+  /* ── code block ── */
+  .cmd {
+    background: #080a0d;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 14px 16px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12.5px;
+    line-height: 1.8;
+    white-space: pre;
+    overflow-x: auto;
+    position: relative;
+  }
+
+  .cmd .c  { color: var(--text-dim); }       /* comment */
+  .cmd .kw { color: var(--cyan); }            /* keyword / builtin */
+  .cmd .str{ color: var(--green); }           /* string / path */
+  .cmd .ph { color: var(--amber); }           /* placeholder */
+  .cmd .flag{ color: #a78bfa; }               /* flags */
+
+  .copy-btn {
+    position: absolute;
+    top: 8px; right: 8px;
+    background: var(--border-hi);
+    border: none;
+    color: var(--text-dim);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    padding: 3px 9px;
+    border-radius: 3px;
+    cursor: pointer;
+    letter-spacing: .05em;
+    transition: background .15s, color .15s;
+  }
+
+  .copy-btn:hover { background: var(--cyan); color: #000; }
+  .copy-btn.copied { background: var(--green); color: #000; }
+
+  .note {
+    margin-top: 10px;
+    font-size: 12.5px;
+    color: var(--text-dim);
+    padding-left: 10px;
+    border-left: 2px solid var(--border-hi);
+    line-height: 1.6;
+  }
+
+  .note strong { color: var(--amber); font-weight: 600; }
+
+  /* ── warnings box ── */
+  .warn-box {
+    margin-top: 40px;
+    background: rgba(240,163,10,.06);
+    border: 1px solid rgba(240,163,10,.3);
+    border-radius: 6px;
+    padding: 16px 20px;
+    animation: fadeUp .4s .55s ease both;
+    opacity: 0;
+  }
+
+  .warn-box .warn-title {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--amber);
+    margin-bottom: 10px;
+  }
+
+  .warn-box ul {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .warn-box li {
+    font-size: 12.5px;
+    color: var(--text);
+    padding-left: 16px;
+    position: relative;
+  }
+
+  .warn-box li::before {
+    content: '▸';
+    position: absolute;
+    left: 0;
+    color: var(--amber);
+  }
+
+  @keyframes fadeUp {
+    from { opacity:0; transform: translateY(8px); }
+    to   { opacity:1; transform: translateY(0); }
+  }
+
+  /* ── footer ── */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 16px 32px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    display: flex;
+    justify-content: space-between;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-dot"></div>
+  <h1>Veeam Linux Repository — Disk Provisioning Runbook</h1>
+  <span class="badge">linuxrepo03</span>
+</header>
+
+<div class="wrap">
+
+  <div class="meta">
+    <div class="meta-cell"><div class="meta-label">Host</div><div class="meta-val">linuxrepo03</div></div>
+    <div class="meta-cell"><div class="meta-label">OS</div><div class="meta-val">Ubuntu 20.04</div></div>
+    <div class="meta-cell"><div class="meta-label">Filesystem</div><div class="meta-val">XFS / GPT</div></div>
+    <div class="meta-cell"><div class="meta-label">Target Size</div><div class="meta-val">~90 TB</div></div>
+    <div class="meta-cell"><div class="meta-label">LVM</div><div class="meta-val">No — raw partition</div></div>
+    <div class="meta-cell"><div class="meta-label">Multipath</div><div class="meta-val">Not configured</div></div>
+  </div>
+
+  <div class="section-title">Procedure Steps</div>
+
+  <div class="steps" id="steps">
+
+    <!-- Step 1 -->
+    <div class="step open">
+      <div class="step-header" onclick="toggle(this)">
+        <span class="step-num">01</span>
+        <span class="step-title">Scan all HBA hosts</span>
+        <span class="step-chevron">▶</span>
+      </div>
+      <div class="step-body">
+        <div class="cmd" id="c1"><button class="copy-btn" onclick="copy('c1',this)">COPY</button><span class="c"># Trigger SCSI rescan across all host adapters</span>
+<span class="kw">for</span> host <span class="kw">in</span> <span class="str">/sys/class/scsi_host/host*</span>; <span class="kw">do</span> <span class="kw">echo</span> <span class="str">"- - -"</span> > $host/scan; <span class="kw">done</span></div>
+        <p class="note">host0–host4 present on this system. Loop handles all of them.</p>
+      </div>
+    </div>
+
+    <!-- Step 2 -->
+    <div class="step">
+      <div class="step-header" onclick="toggle(this)">
+        <span class="step-num">02</span>
+        <span class="step-title">Confirm new device appeared</span>
+        <span class="step-chevron">▶</span>
+      </div>
+      <div class="step-body">
+        <div class="cmd" id="c2"><button class="copy-btn" onclick="copy('c2',this)">COPY</button>dmesg <span class="flag">| tail -20</span>
+lsblk <span class="flag">-o</span> NAME,TYPE,SIZE,FSTYPE,MOUNTPOINT   <span class="c"># expect sdd to appear</span></div>
+        <p class="note"><strong>Note:</strong> Existing disks are sda/sdb/sdc. New disk should present as <strong>sdd</strong>.</p>
+      </div>
+    </div>
+
+    <!-- Step 3 -->
+    <div class="step">
+      <div class="step-header" onclick="toggle(this)">
+        <span class="step-num">03</span>
+        <span class="step-title">Verify size matches ticket</span>
+        <span class="step-chevron">▶</span>
+      </div>
+      <div class="step-body">
+        <div class="cmd" id="c3"><button class="copy-btn" onclick="copy('c3',this)">COPY</button>fdisk <span class="flag">-l</span> <span class="str">/dev/sdd</span></div>
+        <p class="note">Confirm reported capacity matches the provisioned size before partitioning.</p>
+      </div>
+    </div>
+
+    <!-- Step 4 -->
+    <div class="step">
+      <div class="step-header" onclick="toggle(this)">
+        <span class="step-num">04</span>
+        <span class="step-title">Partition — GPT, 100% of disk</span>
+        <span class="step-chevron">▶</span>
+      </div>
+      <div class="step-body">
+        <div class="cmd" id="c4"><button class="copy-btn" onclick="copy('c4',this)">COPY</button>parted <span class="str">/dev/sdd</span> <span class="flag">--script</span> mklabel gpt
+parted <span class="str">/dev/sdd</span> <span class="flag">--script</span> mkpart primary xfs 0% 100%</div>
+        <p class="note"><strong>GPT required</strong> — disk will be &gt;2TB. MBR max is 2TB.</p>
+      </div>
+    </div>
+
+    <!-- Step 5 -->
+    <div class="step">
+      <div class="step-header" onclick="toggle(this)">
+        <span class="step-num">05</span>
+        <span class="step-title">Confirm partition created</span>
+        <span class="step-chevron">▶</span>
+      </div>
+      <div class="step-body">
+        <div class="cmd" id="c5"><button class="copy-btn" onclick="copy('c5',this)">COPY</button>lsblk <span class="str">/dev/sdd</span>   <span class="c"># expect sdd1 child partition</span></div>
+      </div>
+    </div>
+
+    <!-- Step 6 -->
+    <div class="step">
+      <div class="step-header" onclick="toggle(this)">
+        <span class="step-num">06</span>
+        <span class="step-title">Format XFS</span>
+        <span class="step-chevron">▶</span>
+      </div>
+      <div class="step-body">
+        <div class="cmd" id="c6"><button class="copy-btn" onclick="copy('c6',this)">COPY</button>mkfs.xfs <span class="str">/dev/sdd1</span></div>
+        <p class="note"><strong>Note:</strong> At ~90TB this may take several minutes. Do not interrupt. XFS default AG sizing (~1TB per AG) is appropriate at this scale.</p>
+      </div>
+    </div>
+
+    <!-- Step 7 -->
+    <div class="step">
+      <div class="step-header" onclick="toggle(this)">
+        <span class="step-num">07</span>
+        <span class="step-title">Get device path for fstab</span>
+        <span class="step-chevron">▶</span>
+      </div>
+      <div class="step-body">
+        <div class="cmd" id="c7"><button class="copy-btn" onclick="copy('c7',this)">COPY</button>blkid <span class="str">/dev/sdd1</span>   <span class="c"># note UUID if needed, but convention uses /dev path</span></div>
+        <p class="note">Existing repo mounts (CBSU, ALUE) use <strong>/dev/sdX</strong> paths, not UUIDs. Match this convention.</p>
+      </div>
+    </div>
+
+    <!-- Step 8 -->
+    <div class="step">
+      <div class="step-header" onclick="toggle(this)">
+        <span class="step-num">08</span>
+        <span class="step-title">Create mountpoint</span>
+        <span class="step-chevron">▶</span>
+      </div>
+      <div class="step-body">
+        <div class="cmd" id="c8"><button class="copy-btn" onclick="copy('c8',this)">COPY</button>mkdir <span class="flag">-p</span> <span class="str">/mnt/<span class="ph">&lt;REPONAME&gt;</span></span></div>
+        <p class="note">Match existing naming convention — e.g. <strong>CBSU</strong>, <strong>ALUE</strong>, <strong>GIPI</strong>.</p>
+      </div>
+    </div>
+
+    <!-- Step 9 -->
+    <div class="step">
+      <div class="step-header" onclick="toggle(this)">
+        <span class="step-num">09</span>
+        <span class="step-title">Add fstab entry</span>
+        <span class="step-chevron">▶</span>
+      </div>
+      <div class="step-body">
+        <div class="cmd" id="c9"><button class="copy-btn" onclick="copy('c9',this)">COPY</button><span class="c"># Verify current fstab first</span>
+cat <span class="str">/etc/fstab</span>
+
+<span class="c"># Append new entry  ( >> appends,  > would overwrite — never use > here )</span>
+echo <span class="str">"/dev/sdd1  /mnt/<span class="ph">&lt;REPONAME&gt;</span>  xfs  defaults  0  0"</span> >> <span class="str">/etc/fstab</span>
+
+<span class="c"># Confirm line landed correctly</span>
+tail <span class="flag">-3</span> <span class="str">/etc/fstab</span></div>
+        <p class="note"><strong>Convention:</strong> existing mounts use <code>/dev/sdXN</code> with <code>defaults  0  0</code> — no nofail, no UUID.</p>
+      </div>
+    </div>
+
+    <!-- Step 10 -->
+    <div class="step">
+      <div class="step-header" onclick="toggle(this)">
+        <span class="step-num">10</span>
+        <span class="step-title">Mount and verify</span>
+        <span class="step-chevron">▶</span>
+      </div>
+      <div class="step-body">
+        <div class="cmd" id="c10"><button class="copy-btn" onclick="copy('c10',this)">COPY</button>mount <span class="flag">-a</span>
+df <span class="flag">-hT</span> <span class="str">/mnt/<span class="ph">&lt;REPONAME&gt;</span></span>
+
+<span class="c"># Set permissions</span>
+chmod 755 <span class="str">/mnt/<span class="ph">&lt;REPONAME&gt;</span></span></div>
+        <p class="note">If <code>mount -a</code> errors, fix <code>/etc/fstab</code> before rebooting. A bad fstab entry on a non-root mount will drop the host to emergency mode on next boot.</p>
+      </div>
+    </div>
+
+  </div><!-- /steps -->
+
+  <!-- ════ REMOVAL PROCEDURE ════ -->
+  <div class="section-title" style="margin-top:48px">Disk Removal Procedure — /mnt/GIPI</div>
+
+  <div class="steps" id="removal-steps">
+
+    <!-- R1 -->
+    <div class="step open" style="border-left-color: var(--red); animation-delay:.05s">
+      <div class="step-header" onclick="toggle(this)">
+        <span class="step-num">R1</span>
+        <span class="step-title">Check for active processes using the mount</span>
+        <span class="step-chevron">▶</span>
+      </div>
+      <div class="step-body">
+        <div class="cmd" id="cr1"><button class="copy-btn" onclick="copy('cr1',this)">COPY</button><span class="c"># List any processes with open files on the mountpoint</span>
+lsof <span class="str">/mnt/GIPI</span>
+fuser <span class="flag">-mv</span> <span class="str">/mnt/GIPI</span></div>
+        <p class="note"><strong>Do not proceed</strong> if Veeam jobs are active against this repo. Confirm no backup or restore jobs are running in the Veeam console before continuing. The mount must be idle before unmounting.</p>
+      </div>
+    </div>
+
+    <!-- R2 -->
+    <div class="step" style="border-left-color: var(--red); animation-delay:.10s">
+      <div class="step-header" onclick="toggle(this)">
+        <span class="step-num">R2</span>
+        <span class="step-title">Remove repository from Veeam before unmounting</span>
+        <span class="step-chevron">▶</span>
+      </div>
+      <div class="step-body">
+        <div class="cmd" id="cr2"><button class="copy-btn" onclick="copy('cr2',this)">COPY</button><span class="c"># In Veeam Backup & Replication console:</span>
+<span class="c">#   Backup Infrastructure → Backup Repositories</span>
+<span class="c">#   Right-click GIPI repo → Remove</span>
+<span class="c">#   Confirm no dependent jobs or backup chains remain</span>
+<span class="c">#
+# Only proceed to OS-level steps once repo is removed from Veeam</span></div>
+        <p class="note"><strong>Note:</strong> Removing the repo from Veeam first prevents orphaned job references and avoids Veeam attempting to reconnect on next service restart.</p>
+      </div>
+    </div>
+
+    <!-- R3 -->
+    <div class="step" style="animation-delay:.15s">
+      <div class="step-header" onclick="toggle(this)">
+        <span class="step-num">R3</span>
+        <span class="step-title">Unmount the filesystem</span>
+        <span class="step-chevron">▶</span>
+      </div>
+      <div class="step-body">
+        <div class="cmd" id="cr3"><button class="copy-btn" onclick="copy('cr3',this)">COPY</button>umount <span class="str">/mnt/GIPI</span>
+
+<span class="c"># Confirm unmounted — /mnt/GIPI should no longer appear</span>
+df <span class="flag">-hT</span> | grep GIPI
+lsblk <span class="flag">-o</span> NAME,TYPE,SIZE,FSTYPE,MOUNTPOINT</div>
+        <p class="note">If <code>umount</code> returns <em>target is busy</em>, re-run <code>lsof /mnt/GIPI</code> to identify the blocking process and terminate it before retrying.</p>
+      </div>
+    </div>
+
+    <!-- R4 -->
+    <div class="step" style="animation-delay:.20s">
+      <div class="step-header" onclick="toggle(this)">
+        <span class="step-num">R4</span>
+        <span class="step-title">Remove fstab entry</span>
+        <span class="step-chevron">▶</span>
+      </div>
+      <div class="step-body">
+        <div class="cmd" id="cr4"><button class="copy-btn" onclick="copy('cr4',this)">COPY</button><span class="c"># View current fstab before editing</span>
+cat <span class="str">/etc/fstab</span>
+
+<span class="c"># Remove the sdd1 / GIPI line — sed -i deletes the matching line in place</span>
+sed <span class="flag">-i</span> <span class="str">'/\/dev\/sdd1/d'</span> <span class="str">/etc/fstab</span>
+
+<span class="c"># Confirm line is gone</span>
+cat <span class="str">/etc/fstab</span></div>
+        <p class="note"><strong>Verify carefully</strong> — confirm only the sdd1 line was removed. The remaining entries (sda2, sdb1, sdc1, swap) must be intact. A corrupted fstab will cause boot failure.</p>
+      </div>
+    </div>
+
+    <!-- R5 -->
+    <div class="step" style="animation-delay:.25s">
+      <div class="step-header" onclick="toggle(this)">
+        <span class="step-num">R5</span>
+        <span class="step-title">Remove mountpoint directory</span>
+        <span class="step-chevron">▶</span>
+      </div>
+      <div class="step-body">
+        <div class="cmd" id="cr5"><button class="copy-btn" onclick="copy('cr5',this)">COPY</button>rmdir <span class="str">/mnt/GIPI</span>
+
+<span class="c"># Confirm removed</span>
+ls <span class="str">/mnt/</span></div>
+        <p class="note"><code>rmdir</code> will only succeed on an empty directory — if it errors the unmount didn't complete cleanly. Do not use <code>rm -rf</code> here.</p>
+      </div>
+    </div>
+
+    <!-- R6 -->
+    <div class="step" style="border-left-color: var(--amber); animation-delay:.30s">
+      <div class="step-header" onclick="toggle(this)">
+        <span class="step-num">R6</span>
+        <span class="step-title">Wipe partition table from disk</span>
+        <span class="step-chevron">▶</span>
+      </div>
+      <div class="step-body">
+        <div class="cmd" id="cr6"><button class="copy-btn" onclick="copy('cr6',this)">COPY</button><span class="c"># Zero the first and last sectors — destroys GPT header and backup GPT</span>
+wipefs <span class="flag">-a</span> <span class="str">/dev/sdd</span>
+
+<span class="c"># Confirm no filesystem or partition signatures remain</span>
+blkid <span class="str">/dev/sdd</span>
+lsblk <span class="str">/dev/sdd</span></div>
+        <p class="note"><code>wipefs -a</code> removes filesystem and partition signatures. Required if the disk is being returned to storage or reprovisioned — prevents stale GPT/XFS signatures causing confusion on next use.</p>
+      </div>
+    </div>
+
+    <!-- R7 -->
+    <div class="step" style="border-left-color: var(--green); animation-delay:.35s">
+      <div class="step-header" onclick="toggle(this)">
+        <span class="step-num">R7</span>
+        <span class="step-title">Final verification</span>
+        <span class="step-chevron">▶</span>
+      </div>
+      <div class="step-body">
+        <div class="cmd" id="cr7"><button class="copy-btn" onclick="copy('cr7',this)">COPY</button><span class="c"># Confirm disk has no signatures</span>
+blkid <span class="str">/dev/sdd</span>   <span class="c"># should return nothing</span>
+
+<span class="c"># Confirm fstab is clean</span>
+cat <span class="str">/etc/fstab</span>
+
+<span class="c"># Confirm mountpoint gone</span>
+ls <span class="str">/mnt/</span>
+
+<span class="c"># Confirm remaining repos still mounted and healthy</span>
+df <span class="flag">-hT</span> | grep <span class="str">-E 'CBSU|ALUE'</span></div>
+        <p class="note">Confirm CBSU and ALUE are unaffected before closing the ticket.</p>
+      </div>
+    </div>
+
+  </div><!-- /removal-steps -->
+
+  <div class="warn-box" style="border-color: rgba(224,92,92,.3); background: rgba(224,92,92,.05); margin-top:24px;">
+    <div class="warn-title" style="color: var(--red);">⚠ Removal Cautions</div>
+    <ul>
+      <li>Remove the repo from the <strong>Veeam console first</strong> — OS-level steps before this will leave orphaned Veeam config.</li>
+      <li>Confirm no active Veeam jobs against GIPI before unmounting — <code>lsof</code> and <code>fuser</code> will show open handles.</li>
+      <li>Use <code>sed -i</code> carefully — verify only the sdd1 line is removed from fstab. Eyeball the full file after.</li>
+      <li>Use <code>rmdir</code> not <code>rm -rf</code> — if the directory isn't empty the unmount failed.</li>
+      <li>CBSU and ALUE on sdb1/sdc1 are unaffected — confirm both still mounted after completion.</li>
+    </ul>
+  </div>
+
+  <div class="warn-box">
+    <div class="warn-title">⚠ Key Notes</div>
+    <ul>
+      <li>No LVM on this host — raw partition directly to XFS, matching sdb1/sdc1 convention.</li>
+      <li>No multipath configured — build on <code>/dev/sddX</code> directly.</li>
+      <li>GPT mandatory — MBR 2TB limit would be exceeded.</li>
+      <li><code>mkfs.xfs</code> on 90TB may take several minutes — do not interrupt.</li>
+      <li><code>>></code> appends to fstab. <code>></code> overwrites it — never use <code>></code> on fstab.</li>
+    </ul>
+  </div>
+
+</div><!-- /wrap -->
+
+<footer>
+  <span>linuxrepo03 · Ubuntu 20.04 · XFS/GPT</span>
+  <span>Veeam Repository Provisioning</span>
+</footer>
+
+<script>
+  function toggle(header) {
+    const step = header.parentElement;
+    step.classList.toggle('open');
+  }
+
+  function copy(id, btn) {
+    const block = document.getElementById(id);
+    // Extract plain text, stripping HTML tags
+    const text = block.innerText.replace(/^COPY\n/, '').trim();
+    navigator.clipboard.writeText(text).then(() => {
+      btn.textContent = 'COPIED';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = 'COPY'; btn.classList.remove('copied'); }, 1800);
+    });
+  }
+</script>
+</body>
+</html>
