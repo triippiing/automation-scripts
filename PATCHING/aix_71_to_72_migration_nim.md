@@ -4,10 +4,6 @@ Version: 1.0
 Scope:   Version migration of an AIX 7.1 LPAR to AIX 7.2 using
          `nimadm` from a NIM master, with the running 7.1 system
          left untouched until reboot.
-Audience: UNIX/Backup engineer with shell access and root on both
-         the NIM master and the client LPAR, plus HMC access to the
-         client LPAR for emergency console.
-
 ---
 
 ## 1. Scope and assumptions
@@ -24,7 +20,6 @@ This runbook does NOT cover:
 - PowerHA/HACMP-clustered nodes (cluster must be quiesced; migrate
   one node at a time per IBM's PowerHA migration procedure).
 - LPAR migrations (LPM) -- nimadm and LPM are unrelated.
-- Building a NIM master from scratch (assumes one exists).
 - 7.1 -> 7.3 (use a 7.3 NIM master and target a 7.3 lpp_source;
   procedure is otherwise identical).
 
@@ -35,8 +30,7 @@ Assumptions:
 - Network connectivity between client and NIM master, with NFS
   (TCP/UDP 2049) and the standard NIM ports (1058) open in both
   directions.
-- The client is already a defined NIM machine object on the master,
-  or you have rights to define one.
+- The client is already as defined NIM machine object on the master
 - A free, unassigned local disk on the client of equal or greater
   size than the existing rootvg, available for the migration.
 - Root or sudo-to-root on both NIM master and client LPAR.
@@ -52,7 +46,7 @@ Assumptions:
   Source level:        7100-05-12-2336   (AIX 7.1 TL5 SP12, final SP)
   Target level:        7200-05-10        (AIX 7.2 TL5 SP10, example)
   Client LPAR:         lpar01
-  NIM master:          nimsrv01 (already at 7.2 TL5 or higher)
+  NIM master:          dr_nim_01 (already at 7.2 TL5 or higher)
   NIM client object:   lpar01 (already defined on master)
   Spare disk on client: hdisk1 (unassigned, equal size to hdisk0)
   NIM master VG for
@@ -85,7 +79,6 @@ is no benefit to migrating to an older SP and then patching forward.
 | Client is reachable from NIM master and resolves both ways    |  [ ]   |
 | Backup strategy confirmed (mksysb to NIM, plus TSM)           |  [ ]   |
 | Third-party software confirmed compatible with AIX 7.2        |  [ ]   |
-| Rollback plan reviewed and signed off                         |  [ ]   |
 | HMC console access tested for client LPAR                     |  [ ]   |
 
 Third-party software compatibility -- this matters MORE for a version
@@ -292,13 +285,8 @@ Migration needs healthy free space; rule of thumb:
     errpt | head -30
     errpt -a > /tmp/errpt_pre.txt
 
-### 5.7 Network reachability to NIM master
 
-    ping -c 3 nimsrv01
-    rpcinfo -p nimsrv01 | grep -E 'nfs|portmapper|nim'
-    # Confirm portmapper, nfs, and nimesis are listening.
-
-### 5.8 Snapshot of running state
+### 5.7 Snapshot of running state
 
     lssrc -a > /tmp/lssrc_pre.txt
     netstat -rn > /tmp/routing_pre.txt
@@ -336,7 +324,7 @@ Runtime depends on rootvg size and network speed (allow 30-90 min).
 If NIM-resident mksysb is impractical, take a local mksysb to NFS:
 
     df -g /backup
-    mksysb -i -X /backup/$(hostname)_pre72_$(date +%Y%m%d_%H%M).mksysb
+    mksysb -ipX /backup/$(hostname)_pre72_$(date +%Y%m%d_%H%M).mksysb
 
 ### 6.3 Verify the spare disk is ready for nimadm
 
