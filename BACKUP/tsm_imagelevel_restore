@@ -1,0 +1,67 @@
+#!/usr/bin/ksh
+# image_restore_all.sh
+# Image-level (raw LV) restore from TSM
+# Intended for a freshly mksysb-restored host - target FSes must exist as LVs but be unmounted.
+# Ammend configuration vraibles prior to restore with correct node, pit and logdir
+
+#=============================================================
+# CONFIGURATION
+#=============================================================
+PITDATE=16/05/2026
+SERVERNAME=bc01.snap.bc
+LOGDIR=/usr/tivoli/tsm/client/ba/bin64/restorelogs
+
+FS_LIST="/b_user1 /b_user2 /b_user3 /b_user4 \
+         /user5 /user9 /user12 /user16 /user17 /depbuild \
+         /user45 /user41 /user42 /user44 /user46 /user47"
+#=============================================================
+
+mkdir -p ${LOGDIR}
+TS=$(date +%Y%m%d_%H%M%S)
+
+echo "============================================================"
+echo " Image Restore"
+echo "   PIT date  : ${PITDATE}"
+echo "   Server    : ${SERVERNAME}"
+echo "   Log dir   : ${LOGDIR}"
+echo "   Started   : $(date '+%Y-%m-%d %H:%M:%S')"
+echo "============================================================"
+echo ""
+
+# --- Pre-flight: ensure none are currently mounted ---
+echo "Pre-flight check: verifying target filesystems are unmounted"
+MOUNTED=""
+for fs in ${FS_LIST}; do
+    if mount | awk '{print $2}' | grep -qx "${fs}"; then
+        MOUNTED="${MOUNTED} ${fs}"
+    fi
+done
+
+if [ -n "${MOUNTED}" ]; then
+    echo "ERROR: The following filesystems are still mounted and cannot be image-restored:"
+    echo "  ${MOUNTED}"
+    echo "Unmount them first with: umount <fs>"
+    echo "Aborting."
+    exit 1
+fi
+echo "All target filesystems confirmed unmounted. Proceeding."
+echo ""
+
+# --- Launch restores ---
+for fs in ${FS_LIST}; do
+    fsname=$(echo "${fs}" | sed 's|^/||')
+    LOGFILE=${LOGDIR}/image_restore_${fsname}_${TS}.log
+    nohup dsmc restore image "${fs}" \
+        -pitdate=${PITDATE} \
+        -servername=${SERVERNAME} \
+        > ${LOGFILE} 2>&1 &
+    echo "$(date '+%Y-%m-%d %H:%M:%S')  Launched ${fs} as PID $! -> ${LOGFILE}"
+    sleep 2
+done
+
+echo ""
+echo "All image restores launched. Waiting for completion..."
+wait
+echo ""
+echo "$(date '+%Y-%m-%d %H:%M:%S') — All image restores complete."
+echo "Review logs in ${LOGDIR}/image_restore_*_${TS}.log"
