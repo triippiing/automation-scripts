@@ -1,0 +1,32 @@
+#!/usr/bin/ksh
+# Usage: ./filerestore.ksh [PIT_DATE] [SERVERNAME]
+# Example: ./filerestore.ksh 16/05/2026 bc01.bc
+# Replace the fs in the for loop with filesytems in scope for restore
+
+PIT=${1:-16/05/2026}
+SRV=${2:-alfie.stark}
+
+LOGDIR=/usr/tivoli/tsm/client/ba/bin64/restorelogs
+mkdir -p ${LOGDIR}
+TS=$(date +%Y%m%d_%H%M%S)
+
+echo "Starting restore - PIT: ${PIT}, Server: ${SRV}"
+
+for fs in b_user1 b_user2 b_user3 b_user4 \
+          user5 user9 user12 user16 user17 depbuild \
+          user45 user41 user42 user44 user46 user47
+do
+    LOGFILE=${LOGDIR}/restore_${fs}_${TS}.log
+    nohup dsmc restore "/${fs}/*" \
+        -subdir=yes \
+        -pitdate=${PIT} \
+        -replace=no \
+        -servername=${SRV} \
+        > ${LOGFILE} 2>&1 &
+    echo "$(date '+%Y-%m-%d %H:%M:%S')  Launched ${fs} as PID $! -> ${LOGFILE}"
+    sleep 2
+done
+
+echo ""
+echo "All launched. Monitor with:"
+echo "  tail -f ${LOGDIR}/restore_*_${TS}.log"
