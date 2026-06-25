@@ -8,12 +8,12 @@
 #
 # Examples:
 #   ./tsmsnapshot.ksh
-#   ./tsmsnapshot.ksh -n onestopprodvg.onestop
-#   ./tsmsnapshot.ksh -n onestopprodvg.onestop -v onestopprodvg
+#   ./tsmsnapshot.ksh -n demoprodvg.demo
+#   ./tsmsnapshot.ksh -n demoprodvg.demo -v demoprodvg
 #
 
 LOGFILE="/usr/tivoli/tsm/client/ba/bin64/tsmsnap.log"
-VG="onestopprodvg"
+VG="demoprodvg"
 NODE=""
 SNAPCACHESIZE="20"   # % of each filesystem reserved for the JFS2 snapshot (1-100, dsmc default 100)
 
