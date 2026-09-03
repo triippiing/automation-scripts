@@ -2,3 +2,9 @@ ARTIFACTS/
 LOGS/
 .DS_Store
 .claude/
+VIOS/hosts/*
+!VIOS/hosts/hosts.example
+!VIOS/hosts/README.md
+VIOS/vios.conf
+VIOS/vios.conf.*
+!VIOS/vios.conf.example

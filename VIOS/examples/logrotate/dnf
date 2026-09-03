@@ -1,0 +1,13 @@
+# /opt/freeware/etc/logrotate.d/dnf  -  AIX Toolbox dnf logs (logdir=/var/log in dnf.conf)
+
+/var/log/dnf.log
+/var/log/dnf.librepo.log
+/var/log/dnf.rpm.log
+/var/log/hawkey.log {
+    monthly
+    rotate 6
+    compress
+    missingok
+    notifempty
+    copytruncate
+}

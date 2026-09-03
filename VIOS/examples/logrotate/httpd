@@ -1,0 +1,15 @@
+# /opt/freeware/etc/logrotate.d/httpd  -  AIX Toolbox Apache (only where httpd is installed,
+# e.g. the NIM/repo server). Harmless elsewhere: missingok.
+
+/opt/freeware/var/log/httpd/*log {
+    weekly
+    rotate 8
+    compress
+    delaycompress
+    missingok
+    notifempty
+    sharedscripts
+    postrotate
+        [ -x /opt/freeware/sbin/apachectl ] && /opt/freeware/sbin/apachectl graceful > /dev/null 2>&1 || true
+    endscript
+}

@@ -11,6 +11,13 @@ A collection of standalone AIX and Linux system administration automation script
 All scripts are standalone and run directly:
 
 ```sh
+# VIOS scripts (ksh, root via oem_setup_env) - default to test/preview, -a apply to change
+ksh VIOS/install_efix.ksh -d /path/to/epkgs [-a apply]
+ksh VIOS/installp_update.ksh -d /path/to/images -p openssl [-a apply]
+ksh VIOS/vios_standardise.ksh -n     # post-install standard build, -n = dry-run, -s step,... to select
+ksh VIOS/rulestoset.ksh -n            # -n = dry-run
+ksh VIOS/push_files.ksh -M manifest -H hosts -n
+
 # AIX scripts (ksh)
 ksh infogather.ksh
 ksh fsmonitor.ksh
@@ -45,6 +52,7 @@ Dry-run support:
 - `ADMIN/` — live system diagnostics and configuration (run on the source/target AIX host)
 - `BACKUP/` — backup orchestration: NIM DR (`aixtonim.ksh`), Oracle RMAN via TSM-TDPO (the two `*schedcreator` scripts), TSM image restore prep (`tsm_restore_prep.sh`), JFS2 snapshot backup (`tsmsnapshot.ksh`)
 - `PATCHING/` — OS patching automation (`rhelpatch.sh` for RHEL 9.x)
+- `VIOS/` — VIO server / AIX stand-up and maintenance: efix and installp updates, DNF and logrotate install, adapter rules, unused-adapter audit, LLDP, SEA status, file push to many hosts. All source `VIOS/vios_lib.ksh`; site settings in `VIOS/vios.conf` (see `vios.conf.example`). See `VIOS/README.md`.
 - `ARTIFACTS/` — static HTML runbooks and cheatsheets (rendered in a browser, not executed)
 - `LOGS/` — log output from automation runs
 

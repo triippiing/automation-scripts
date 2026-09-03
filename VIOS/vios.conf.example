@@ -1,0 +1,31 @@
+# Site configuration for the VIOS/AIX maintenance scripts.
+#
+#   vios.conf              base settings, copied from this file      (gitignored)
+#   vios.conf.<env>        per-environment overrides, loaded when VIOS_ENV=<env>   (gitignored)
+#   /etc/vios_scripts.conf same format, read first, for hosts where the scripts are installed locally
+#
+# Use the VAR=${VAR:-value} form so an environment variable still wins. Nothing in this file
+# should be needed for a default build; every value has a sane default in vios_lib.ksh.
+
+# Where scripts write their logs
+LOGDIR=${LOGDIR:-/var/log/vios_scripts}
+
+# NFS package repository exported by the NIM server, and where to mount it locally
+REPO_EXPORT=${REPO_EXPORT:-/repo1}
+REPO_MNT=${REPO_MNT:-/repo1}
+
+# AIX Toolbox root
+FREEWARE=${FREEWARE:-/opt/freeware}
+
+# push_files.ksh: remote user and default host list (see hosts/hosts.example)
+PUSH_USER=${PUSH_USER:-padmin}
+PUSH_HOSTFILE=${PUSH_HOSTFILE:-hosts/${VIOS_ENV:-all}.hosts}
+
+# vios_standardise.ksh
+FS_SIZES=${FS_SIZES:-"/usr:8 /var:3 /opt:3"}
+PAGING_GB=${PAGING_GB:-8}
+LIMIT_NOFILES=${LIMIT_NOFILES:-8000}
+SSHD_CLIENT_ALIVE=${SSHD_CLIENT_ALIVE:-600}
+SSHD_X11=${SSHD_X11:-yes}
+SSHD_BANNER=${SSHD_BANNER:-/etc/ssh/SEbanner}
+# HERALD=${HERALD:-'Unauthorized use of this system is prohibited.\n\nlogin:'}

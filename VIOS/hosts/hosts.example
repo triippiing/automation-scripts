@@ -1,0 +1,6 @@
+# Host list for push_files.ksh / rotate_ssh_key.sh: one hostname or IP per line, # comments allowed.
+# Copy to hosts/<env>.hosts (e.g. hosts/prod.hosts) and select with VIOS_ENV=prod or -H.
+# Real host lists are gitignored; only this example is committed.
+vio-a-site1.example.internal
+vio-b-site1.example.internal
+# vio-a-site2.example.internal

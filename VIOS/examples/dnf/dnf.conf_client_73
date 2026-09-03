@@ -1,0 +1,36 @@
+# /opt/freeware/etc/dnf/dnf.conf  -  AIX 7.3 client, packages from the NIM server's /repo1 export
+# mounted locally on /repo1 by install_dnf.ksh / install_logrotate.ksh.
+#
+# The baseurl paths must match how /repo1 is laid out on the NIM server. The IBM AIX Toolbox
+# mirror layout is RPMS/ppc-7.3 (level specific), RPMS/ppc (common) and RPMS/noarch.
+# Check with:  ls /repo1/RPMS   on a host with /repo1 mounted, and adjust.
+
+[main]
+cachedir=/var/cache/dnf
+keepcache=0
+debuglevel=2
+logdir=/var/log
+exactarch=1
+obsoletes=1
+gpgcheck=0
+plugins=1
+installonly_limit=3
+skip_if_unavailable=True
+
+[repo1_ppc_73]
+name=AIX Toolbox 7.3 (repo1)
+baseurl=file:///repo1/RPMS/ppc-7.3
+enabled=1
+gpgcheck=0
+
+[repo1_ppc]
+name=AIX Toolbox common (repo1)
+baseurl=file:///repo1/RPMS/ppc
+enabled=1
+gpgcheck=0
+
+[repo1_noarch]
+name=AIX Toolbox noarch (repo1)
+baseurl=file:///repo1/RPMS/noarch
+enabled=1
+gpgcheck=0

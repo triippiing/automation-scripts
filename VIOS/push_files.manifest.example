@@ -1,0 +1,21 @@
+# Manifest of standard files, used by push_files.ksh (from the admin host) and by the payload step of
+# vios_standardise.ksh (on the VIO itself). Paths are relative to the VIOS/ directory.
+# <local source>              <remote destination>                <owner:group>   <mode>  [backup]
+
+# --- login environment ---
+payload/v4.1.1.00.profile     /etc/profile                        bin:bin         555     backup
+payload/default.bashrc        /usr/local/bin/default.bashrc       root:staff      644
+payload/default.profile       /usr/local/bin/default.profile      root:staff      644
+payload/padmin.kshrc          /home/padmin/.kshrc                 root:staff      644
+payload/SEbanner              /etc/ssh/SEbanner                   root:system     644
+
+# --- access ---
+payload/Unix_Admin.sudo       /etc/sudoers.d/Unix_Admin           root:system     440
+payload/IBMi_VIO.sudo         /etc/sudoers.d/IBMi_VIO             root:system     440
+
+# --- scripts and data kept on every VIO (listed in filestosave.txt) ---
+payload/filestosave.txt       /usr/local/bin/filestosave.txt      root:system     644
+payload/removeunwanted.ksh    /usr/local/bin/removeunwanted.ksh   root:system     755
+rulestoset.ksh                /usr/local/bin/rulestoset.ksh       root:system     755
+vios_lib.ksh                  /usr/local/bin/vios_lib.ksh         root:system     644
+adapter_rules.conf            /usr/local/bin/adapter_rules.conf   root:system     644

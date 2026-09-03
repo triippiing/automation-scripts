@@ -1,0 +1,2 @@
+%Unix_Admin ALL=(ALL:ALL) NOPASSWD: /usr/ios/cli/ioscli ioslevel, /usr/ios/cli/ioscli lsmap *, /usr/ios/cli/ioscli lsvopt, /usr/bin/id, /usr/ios/cli/ioscli lsrep *, /usr/bin/errpt, /usr/ios/cli/ioscli lsdev, /usr/bin/netstat -in
+%Unix_Admin ALL=(ALL:ALL) /usr/bin/su - padmin

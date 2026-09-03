@@ -1,0 +1,44 @@
+# /opt/freeware/etc/logrotate.d/system  -  AIX / VIOS system logs
+#
+# /var/log/messages is NOT here: syslogd rotates it itself via the
+# "rotate time 1m files 12 compress" clause vios_standardise.ksh adds to /etc/syslog.conf.
+
+/var/adm/sulog {
+    weekly
+    rotate 8
+    compress
+    missingok
+    notifempty
+    copytruncate
+    create 600 root system
+}
+
+/var/adm/cron/log {
+    monthly
+    rotate 6
+    compress
+    missingok
+    notifempty
+    copytruncate
+    create 600 root system
+}
+
+/var/log/vios_scripts/*.log {
+    monthly
+    rotate 6
+    compress
+    missingok
+    notifempty
+    copytruncate
+}
+
+# binary login accounting; truncate in place so last/who keep working
+/var/adm/wtmp {
+    monthly
+    rotate 6
+    compress
+    missingok
+    notifempty
+    copytruncate
+    create 664 adm adm
+}
