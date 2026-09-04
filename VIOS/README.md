@@ -107,6 +107,38 @@ exists before copying it. `filestosave.txt` had a duplicate entry.
 
 Host lists live in `hosts/` and are **not** committed to GitHub (internal hostnames).
 
+## Building the deployment tarball
+
+Everything a new VIO server needs travels in one tarball, built on your admin host (macOS, Linux or AIX)
+from a checkout of this repo:
+
+```sh
+git clone https://github.com/triippiing/automation-scripts.git
+cd automation-scripts/VIOS
+cp vios.conf.example vios.conf              # once; edit site values if any (gitignored)
+sh make_tarball.sh -f ~/vios_fixes           # -> vios_build_<yyyymmdd>.tar in the current directory
+scp vios_build_*.tar padmin@<vios>:/home/padmin/
+```
+
+`-f` points at a directory of fix packages downloaded from IBM Fix Central, laid out as
+`<ioslevel>/<one directory per fix>/`, for example:
+
+```
+~/vios_fixes/
+  4.1.2.10/
+    IJ54321/  IJ54321s1a.240601.epkg.Z
+    IJ55555/  IJ55555s1a.240701.epkg.Z
+    openssl_3.0.13/  openssl.base  openssl.license  ...
+```
+
+The driver picks `fixes/<ioslevel>` to match what `ioslevel` reports on the server, so one tarball can hold
+fixes for several releases. Leave `-f` off if there are no fixes yet; the fixes phase then reports
+"no fixes directory" and moves on. Fix packages are never committed to this repo.
+
+The tarball contains every script here, `adapter_rules.conf`, `push_files.manifest` (or its `.example`),
+`payload/`, `vios.conf*` if present, and the fixes tree, all under a top-level `vios_build/`. It leaves
+out `tests/` and `hosts/`. `-o <file>` names the output. Built tarballs are gitignored.
+
 ## Standing up a VIO server
 
 See `RUNBOOK.md`. In short: install from the ISO and accept the license by hand, copy the tarball made by
