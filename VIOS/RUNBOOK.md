@@ -120,3 +120,216 @@ a tarball can carry fixes for several releases.
 
 The tarball holds every script, `adapter_rules.conf`, `push_files.manifest` (or the `.example`),
 `payload/`, `vios.conf*` if present and the fixes tree. It leaves out `tests/` and `hosts/`.
+
+## Appendix: what a run looks like
+
+A simulated transcript, assembled from the scripts' actual output formats. It has not been captured from
+real hardware. Sample inputs: hostname `vios1`, IP `10.20.30.41/24`, gateway `10.20.30.1`,
+DNS `10.20.1.10` in `example.com`, VIOS 4.1.2.10, one fix `IJ54321` in the tarball, two physical
+(`ent0`, `ent1`) and two virtual (`ent2`, `ent3`) ethernet adapters, two FC adapters, no SEA yet.
+
+### First run, network not yet configured
+
+```
+# ksh vios_build.ksh
+   Host                                : vios1  VIOS 4.1.2.10
+   Phases                              : check build fixes
+
+== check
+Network is not configured. Configure it now [n]: y
+
+No network is configured. The answers below are passed to mktcpip.
+Hostname: vios1
+Interface [en0]:
+IP address: 10.20.30.41
+Netmask [255.255.255.0]:
+Gateway: 10.20.30.1
+DNS server (blank for none): 10.20.1.10
+DNS domain: example.com
+     mktcpip                           : done
+     license                           : ok - ioscli answers (ioslevel 4.1.2.10)
+     hostname                          : ok - vios1
+     default route                     : ok - 10.20.30.1
+     DNS                               : ok - 10.20.1.10
+     NTP                               : WARNING xntpd not running (cfgassist or startnetsvc ntp)
+
+== build
+   Host                                : vios1  VIOS 4.1.2.10
+   Steps                               : filesystems padmin_env payload languages rules herald dumpcheck limits sshd syslog paging loginname tunables
+
+   == filesystems
+     /usr                              : 3G -> 8G
+     /var                              : 1G -> 3G
+     /opt                              : 1G -> 3G
+
+   == padmin_env
+     padmin .profile                   : ENV=/home/padmin/.kshrc added
+     /var/adm/commandlog               : created
+
+   == payload
+     manifest                          : /home/padmin/vios_build/push_files.manifest.example
+     /etc/profile                      : installed
+     /usr/local/bin/default.bashrc     : installed
+     /etc/ssh/SEbanner                 : installed
+     /etc/sudoers.d/Unix_Admin         : installed
+     /usr/local/bin/filestosave.txt    : installed
+     /usr/local/bin/removeunwanted.ksh : installed
+     /usr/local/bin/default.profile    : installed
+     /home/padmin/.kshrc               : installed
+     /etc/sudoers.d/IBMi_VIO           : installed
+
+   == languages
+Installed openssh.msg filesets : 12
+Keeping                        : en_US,EN_US
+To remove                      :
+    openssh.msg.CA_ES
+    openssh.msg.DE_DE
+    openssh.msg.ES_ES
+    openssh.msg.FR_FR
+    openssh.msg.IT_IT
+    openssh.msg.JA_JP
+    openssh.msg.KO_KR
+    openssh.msg.PT_BR
+    openssh.msg.RU_RU
+    openssh.msg.ZH_CN
+All unwanted openssh message filesets removed
+
+   == rules
+   FC adapter rules
+     fcs0 (df1000e21410f103)
+     set                               : adapter/pciex/df1000e21410f103 max_xfer_size=0x400000
+     set                               : adapter/pciex/df1000e21410f103 num_io_queues=16
+     set                               : adapter/pciex/df1000e21410f103 num_cmd_elems=2048
+   Standard rules
+     set                               : adapter/vdevice/IBM,l-lan max_buf_huge=128
+     set                               : adapter/vdevice/IBM,l-lan max_buf_large=256
+     set                               : adapter/vdevice/IBM,l-lan max_buf_medium=2048
+     set                               : adapter/vdevice/IBM,l-lan max_buf_small=4096
+     set                               : adapter/vdevice/IBM,l-lan max_buf_tiny=4096
+     set                               : adapter/vdevice/IBM,l-lan queues_rx=4
+     set                               : disk/fcp/mpioosdisk reserve_policy=no_reserve
+     set                               : disk/fcp/mpioosdisk algorithm=shortest_queue
+     set                               : disk/fcp/mpioosdisk queue_depth=32
+     set                               : disk/fcp/mpioosdisk max_transfer=0x100000
+   Deploy                              : rules deployed and applied
+   Result                              : OK
+
+   == herald
+     herald                            : set
+
+   == dumpcheck
+     dumpcheck                         : patched
+
+   == limits
+     limits fsize                      : unset -> -1
+     limits nofiles                    : 2000 -> 8000
+
+   == sshd
+     sshd Banner                       : unset -> /etc/ssh/SEbanner
+     sshd ClientAliveInterval          : unset -> 600
+     sshd X11Forwarding                : no -> yes
+     sshd                              : restarted
+
+   == syslog
+     syslog.conf                       : added and syslogd refreshed
+
+   == paging
+     hd6                               : 512MB -> 8192MB (+60 x 128MB)
+
+   == loginname
+     LOGIN_NAME_MAX                    : 9 -> 256 (after reboot)
+
+   == tunables
+     ioo j2_dynamicBufferPreallocation : 16 -> 256
+     no tcp_fastlo                     : 0 -> 1
+     acfo in_core_enabled              : 0 -> 1
+
+   Result                              : OK
+   Reboot required                     : for: rules max_logname  (shutdown -restart)
+   Next                                : reboot, then verify with: rulestoset.ksh -n, sea_status.ksh, unused_adapters.ksh
+
+== fixes
+   Host                                : vios1  VIOS 4.1.2.10
+   Steps                               : fixes
+
+   == fixes
+   Host                                : vios1
+   Platform                            : VIO 4.1.2.10
+   Fix                                 : IJ54321
+   Mode                                : apply
+   Preview IJ54321s1a.240601.epkg.Z    : OK
+   Install IJ54321s1a.240601.epkg.Z    : OK
+   Reboot required                     : IJ54321s1a.240601.epkg.Z
+   Result                              : installed successfully
+
+   Result                              : OK
+
+   Result                              : OK - reboot now (shutdown -restart), then run vios_build.ksh again for the verify phase
+```
+
+Then, as padmin: `shutdown -restart`.
+
+### Second run, after the reboot
+
+```
+# ksh vios_build.ksh
+   Host                                : vios1  VIOS 4.1.2.10
+   Phases                              : verify
+
+== verify
+   Mode                                : DRY RUN - nothing will be changed
+   FC adapter rules
+     fcs0 (df1000e21410f103)
+     would set                         : adapter/pciex/df1000e21410f103 max_xfer_size=0x400000
+     would set                         : adapter/pciex/df1000e21410f103 num_io_queues=16
+     would set                         : adapter/pciex/df1000e21410f103 num_cmd_elems=2048
+   Standard rules
+     would set                         : adapter/vdevice/IBM,l-lan max_buf_huge=128
+     ... (one line per entry in adapter_rules.conf)
+   Deploy                              : skipped (dry run)
+No Shared Ethernet Adapters found on vios1
+NPIV logged-in mappings : 0
+   Checking FC adapters (fcs) against lsnports
+     all fcs adapters are in use
+
+   Checking ethernet adapters (ent)
+     ent2                              : not in use
+     ent3                              : not in use
+
+   To remove, as padmin (verify link-down ones first):
+     for num in 2 3; do
+       rmtcpip -f -interface et${num}
+       rmtcpip -f -interface en${num}
+       rmdev -dev en${num} -recursive -ucfg
+       rmdev -dev et${num} -recursive -ucfg
+       rmdev -dev ent${num} -recursive -ucfg
+       chdev -dev ent${num} -attr autoconfig=defined
+     done
+
+Full detail in /var/log/vios_scripts/unused_adapters.log
+
+   Summary                             : hostname  sea  switch  switch-port-mac  port-description
+
+  Useful commands:  lldpctl show port <sea>
+                    lldpctl show neighbor <sea> | egrep 'Port Description:|System Name:'
+
+   Day two, from the admin host        : push_files.ksh -M push_files.manifest -h vios1   (later changes to the standard files)
+                                       : install_dnf.ksh / install_logrotate.ksh once the NIM repo is reachable
+                                       : SEA, NPIV and storage mappings are per server and not part of this build
+
+   Result                              : OK
+```
+
+Two things to read carefully in the second run. The rules dry run says "would set" for every rule even
+after they were deployed, because `rulestoset.ksh -n` prints its intended commands rather than a diff;
+use `rules -o diff` for a compliance check. And `unused_adapters.ksh` lists the virtual ethernet adapters
+as unused because no SEA exists yet; do not remove them, they are what the SEA will be built on.
+
+If the second run is started before the reboot it stops with:
+
+```
+== verify
+     verify                            : build ran in this boot - reboot first (shutdown -restart), then run again
+
+   Result                              : verify FAILED - fix and run again (see /var/log/vios_scripts/vios_build.log)
+```
