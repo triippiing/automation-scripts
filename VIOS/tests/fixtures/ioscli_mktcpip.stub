@@ -1,0 +1,11 @@
+#!/bin/ksh
+# ioscli stub: answers ioslevel, and on mktcpip rewrites the netstat and hostname stubs so that the
+# network checks pass afterwards, as they would on a real box.
+print -- "ioscli $*" >> "$STUB_LOG"
+if [[ "$1" == mktcpip ]]; then
+    stubs=$(dirname "$0")
+    printf '#!/bin/ksh\nprint "default 10.0.0.1 UG 0 0 en0"\n' > "$stubs/netstat"
+    printf '#!/bin/ksh\nprint vios1\n' > "$stubs/hostname"
+fi
+print 4.1.2.10
+exit 0

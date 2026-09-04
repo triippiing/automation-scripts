@@ -7,6 +7,10 @@ Refactored from the scripts recovered from the old NIM server (September 2026). 
 
 | Refactored                   | Replaces                              | Purpose |
 |------------------------------|---------------------------------------|---------|
+| `RUNBOOK.md`                 | (memory)                              | Blank install to standard build, start to finish: attended steps, then `vios_build.ksh` before and after the reboot |
+| `vios_build.ksh`             | (nothing)                             | Phase driver for the runbook: `check` (license, network), `build` (standardise), `fixes`, reboot, `verify`. State file makes the second run resume |
+| `make_tarball.sh`            | (nothing)                             | Builds the deployment tarball on the admin host: scripts, config, payload and a fixes tree |
+| `tests/`                     | (nothing)                             | `ksh tests/run_tests.ksh`: unit tests against stubbed AIX commands, runs on any ksh93 |
 | `vios_lib.ksh`               | (copy-pasted code in every script)    | Shared logging, root/platform checks, `/repo1` mount helpers, config loading |
 | `vios.conf.example`          | hard-coded paths                      | Site settings: log dir, repo export/mount, toolbox root, push user/hostfile |
 | `examples/dnf/`              | `/software/dnf/dnf.conf_client_NN` (lost) | Client `dnf.conf` per AIX level pointing at the `/repo1` mirror. Used when the mount has none |
@@ -19,7 +23,7 @@ Refactored from the scripts recovered from the old NIM server (September 2026). 
 | `unused_adapters.ksh`        | `unused_adapters.ksh`                 | Read-only audit of unused fcs/ent adapters, prints the removal commands |
 | `lldp_setup.ksh`             | `lldp_setup.ksh`                      | Enable LLDP on each SEA and report the connected switch/port |
 | `sea_status.ksh`             | `port_status.ksh`, `port_link.ksh`    | Quick SEA link/status view; `-v` VLANs, `-n` NPIV mappings, `-a` both |
-| `vios_standardise.ksh`       | `Vios_3.1.2.60.ksh`, `Vios_4.1.1.00.ksh`, `Vios_4.1.2.10_fresh_install.ksh` | Post-install standard build: filesystems, paging, herald, limits, sshd, syslog, profile/kshrc/banner/sudoers, language cleanup, adapter rules; optional fix tree install. Idempotent, `-n` dry run, `-s` step selection |
+| `vios_standardise.ksh`       | `Vios_3.1.2.60.ksh`, `Vios_4.1.1.00.ksh`, `Vios_4.1.2.10_fresh_install.ksh`, tunables from `ADMIN/perftuning.ksh` | Post-install standard build: filesystems, paging, herald, limits, sshd, syslog, profile/kshrc/banner/sudoers, language cleanup, adapter rules, system tunables; optional fix tree install. Idempotent, `-n` dry run, `-s` step selection |
 | `push_files.ksh` + `push_files.manifest.example` | `rollout.ksh`     | Push files from an admin host to a list of VIOS/AIX hosts and install them as root |
 | `rotate_ssh_key.sh`          | `vdikey_update.bash`                  | Swap one public key for another in your authorized_keys across a host list |
 | `payload/`                   | files rollout.ksh pushed              | The standard VIO login environment and access files (see below) |
@@ -74,6 +78,12 @@ Refactored from the scripts recovered from the old NIM server (September 2026). 
   timestamped copy of the existing file.
 * `unused_adapters` / `lldp_setup` / `sea_status`: device names match as whole words
   (`fcs1` no longer matches `fcs10`).
+* `vios_standardise` tunables step: driven by `TUNABLES` in `vios.conf` (`<tool>:<name>=<value>`), reads each
+  value first and only sets it when different, logging before and after. It absorbs the `ioo`, `no` and `acfo`
+  part of `ADMIN/perftuning.ksh`. That script's `chdef` device defaults (disk queue_depth, max_transfer,
+  algorithm; virtual ethernet max_buf_small/tiny) went into `adapter_rules.conf` instead, because on a VIO
+  server `rules` owns device defaults and `rulescfgset` would otherwise undo a plain `chdef`. The JSON report
+  was dropped. `ADMIN/perftuning.ksh` itself is unchanged and still the tool for plain AIX hosts.
 
 ## Payload files
 
@@ -97,21 +107,57 @@ exists before copying it. `filestosave.txt` had a duplicate entry.
 
 Host lists live in `hosts/` and are **not** committed to GitHub (internal hostnames).
 
+## Building the deployment tarball
+
+Everything a new VIO server needs travels in one tarball, built on your admin host (macOS, Linux or AIX)
+from a checkout of this repo:
+
+```sh
+git clone https://github.com/triippiing/automation-scripts.git
+cd automation-scripts/VIOS
+cp vios.conf.example vios.conf              # once; edit site values if any (gitignored)
+sh make_tarball.sh -f ~/vios_fixes           # -> vios_build_<yyyymmdd>.tar in the current directory
+scp vios_build_*.tar padmin@<vios>:/home/padmin/
+```
+
+`-f` points at a directory of fix packages downloaded from IBM Fix Central, laid out as
+`<ioslevel>/<one directory per fix>/`, for example:
+
+```
+~/vios_fixes/
+  4.1.2.10/
+    IJ54321/  IJ54321s1a.240601.epkg.Z
+    IJ55555/  IJ55555s1a.240701.epkg.Z
+    openssl_3.0.13/  openssl.base  openssl.license  ...
+```
+
+The driver picks `fixes/<ioslevel>` to match what `ioslevel` reports on the server, so one tarball can hold
+fixes for several releases. Leave `-f` off if there are no fixes yet; the fixes phase then reports
+"no fixes directory" and moves on. Fix packages are never committed to this repo.
+
+The tarball contains every script here, `adapter_rules.conf`, `push_files.manifest` (or its `.example`),
+`payload/`, `vios.conf*` if present, and the fixes tree, all under a top-level `vios_build/`. It leaves
+out `tests/` and `hosts/`. `-o <file>` names the output. Built tarballs are gitignored.
+
 ## Standing up a VIO server
 
-1. Install VIOS from the ISO, configure networking, mount the NIM software share.
-2. As root (`oem_setup_env`), from the mounted `VIOS/` directory:
-   ```sh
-   ksh vios_standardise.ksh -n                      # review
-   ksh vios_standardise.ksh -F <mnt>/vios/vios_standards/4.1.2.0   # apply, plus the fix tree
-   shutdown -restart
-   ```
-3. After the reboot: `rulestoset.ksh -n`, `sea_status.ksh -a`, `unused_adapters.ksh`, `lldp_setup.ksh`.
-4. Later changes to the standard files go out with `push_files.ksh` from the admin host.
+See `RUNBOOK.md`. In short: install from the ISO and accept the license by hand, copy the tarball made by
+`make_tarball.sh`, untar it, then
 
-The fix tree layout is one sub-directory per fix: epkg files are installed with `install_efix.ksh`,
-`ios.viodb*` with `updateios`, anything else with `installp_update.ksh`. Fix packages are
-downloaded from IBM Fix Central per advisory and are not kept in git.
+```sh
+oem_setup_env
+cd /home/padmin/vios_build
+ksh vios_build.ksh -n        # dry run
+ksh vios_build.ksh           # check, build, fixes -> "reboot now"
+shutdown -restart
+ksh vios_build.ksh           # after the reboot: verify
+```
+
+The fix tree layout is one sub-directory per fix under `fixes/<ioslevel>/`: epkg files are installed
+with `install_efix.ksh`, `ios.viodb*` with `updateios`, anything else with `installp_update.ksh`. Fix
+packages are downloaded from IBM Fix Central per advisory and are not kept in git. Later changes to the
+standard files go out with `push_files.ksh` from the admin host; DNF and logrotate are installed from the
+admin host too, once the NIM repo is reachable.
 
 ## Retired
 
@@ -129,3 +175,6 @@ Scripts from the old NIM server that are deliberately not carried forward:
 Everything was syntax-checked with ksh93 and exercised end to end against stubbed AIX
 commands (`emgr`, `installp`, `lsdev`, `rules`, `lldpctl`, `ssh`, ...). It has **not** been
 run on a real VIO server yet. First run on a real box should be in test/dry-run mode.
+
+`ksh tests/run_tests.ksh` runs the unit tests for `vios_build.ksh`, the tunables step and
+`make_tarball.sh` on any ksh93 (macOS, Linux, AIX); AIX commands and sibling scripts are stubbed per test.
