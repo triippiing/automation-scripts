@@ -8,3 +8,4 @@ VIOS/hosts/*
 VIOS/vios.conf
 VIOS/vios.conf.*
 !VIOS/vios.conf.example
+VIOS/vios_build_*.tar

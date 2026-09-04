@@ -29,3 +29,7 @@ SSHD_CLIENT_ALIVE=${SSHD_CLIENT_ALIVE:-600}
 SSHD_X11=${SSHD_X11:-yes}
 SSHD_BANNER=${SSHD_BANNER:-/etc/ssh/SEbanner}
 # HERALD=${HERALD:-'Unauthorized use of this system is prohibited.\n\nlogin:'}
+
+# System tunables applied by the tunables step: <tool>:<name>=<value>, tool is ioo, no, vmo, schedo or acfo.
+# Device defaults (disk queue depths, virtual ethernet buffers) are not tunables; they go in adapter_rules.conf.
+TUNABLES=${TUNABLES:-"ioo:j2_dynamicBufferPreallocation=256 no:tcp_fastlo=1 acfo:in_core_enabled=1"}

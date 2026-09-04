@@ -20,7 +20,8 @@
 #|                syslog        *.debug to /var/log/messages with rotation
 #|                paging        grow hd6 to the standard size, remove paging00 if present
 #|                loginname     max_logname=256 for long LDAP names (needs reboot)
-#|                tunables      acfo in_core_enabled=1
+#|                tunables      ioo / no / acfo settings from TUNABLES (default: j2_dynamicBufferPreallocation,
+#|                              tcp_fastlo, in_core_enabled), each read first and only set when different
 #|                fixes         only with -F: install every fix directory under the given path
 #|
 #| Usage:       vios_standardise.ksh [-n] [-s <step,...>] [-M <manifest>] [-F <fixes dir>] [-l]
@@ -34,7 +35,7 @@
 #|                -l  list steps and exit
 #|
 #|              Sizes and texts can be overridden in vios.conf: FS_SIZES, PAGING_GB, HERALD, LIMIT_NOFILES,
-#|              SSHD_CLIENT_ALIVE, SSHD_X11.
+#|              SSHD_CLIENT_ALIVE, SSHD_X11, TUNABLES.
 #|
 #| Note:        Run as root (padmin: oem_setup_env) from the mounted vios_standards tree, so that
 #|              vios_lib.ksh, the manifest and payload/ are alongside. Reboot afterwards.
@@ -48,6 +49,8 @@
 #|                           paging grown to a target size instead of adding a fixed number of partitions,
 #|                           sshd options set/replaced rather than appended after the commented default,
 #|                           GSKit/LDAP client install dropped, FC tuning moved to adapter_rules.conf
+#| 04/09/2026 :            : tunables step driven by TUNABLES with before/after values (absorbs the ioo/no/acfo
+#|                           part of ADMIN/perftuning.ksh; its device defaults went to adapter_rules.conf)
 #|-----------------------------------------------------------------------------------------------------------------|
 
 set -u
@@ -61,6 +64,7 @@ LIMIT_NOFILES=${LIMIT_NOFILES:-8000}
 SSHD_CLIENT_ALIVE=${SSHD_CLIENT_ALIVE:-600}
 SSHD_X11=${SSHD_X11:-yes}
 SSHD_BANNER=${SSHD_BANNER:-/etc/ssh/SEbanner}
+TUNABLES=${TUNABLES:-"ioo:j2_dynamicBufferPreallocation=256 no:tcp_fastlo=1 acfo:in_core_enabled=1"}
 
 ALL_STEPS="filesystems padmin_env payload languages rules herald dumpcheck limits sshd syslog paging loginname tunables"
 STEPS=""
@@ -345,12 +349,33 @@ step_loginname() {
 }
 
 #############################################
+# TUNABLES is a list of <tool>:<name>=<value>, tool being ioo, no, vmo, schedo or acfo. Each is read first
+# and only set when it differs, with the before/after values on screen and in the log.
+get_tunable() {   # get_tunable <tool> <name>
+    case "$1" in
+        acfo) acfo -d -t "$2" 2>/dev/null | awk -F: 'NR==1 {gsub(/[[:space:]]/,"",$2); print $2}' ;;
+        *)    "$1" -o "$2" 2>/dev/null | awk -F= 'NR==1 {gsub(/[[:space:]]/,"",$2); print $2}' ;;
+    esac
+}
+
 step_tunables() {
-    if command -v acfo >/dev/null 2>&1; then
-        do_cmd acfo -p -t in_core_enabled=1 && ok "  acfo in_core_enabled" "set" || { log_and_screen "  acfo" "FAILED"; errors=1; }
-    else
-        log_and_screen "  acfo" "not available on this level, skipping"
-    fi
+    for t in $TUNABLES; do
+        tool=${t%%:*}; setting=${t#*:}; name=${setting%%=*}; want=${setting##*=}
+        if ! command -v "$tool" >/dev/null 2>&1; then
+            log_and_screen "  $tool $name" "not available on this level, skipping"
+            continue
+        fi
+        cur=$(get_tunable "$tool" "$name")
+        if [[ "$cur" == "$want" ]]; then
+            log_and_screen "  $tool $name" "already $want"
+            continue
+        fi
+        case "$tool" in
+            acfo) set -- acfo -p -t "$setting" ;;
+            *)    set -- "$tool" -p -o "$setting" ;;
+        esac
+        do_cmd "$@" && ok "  $tool $name" "${cur:-unset} -> $want" || { log_and_screen "  $tool $name" "FAILED"; errors=1; }
+    done
 }
 
 #############################################
